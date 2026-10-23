@@ -15,6 +15,7 @@ from app.api import (
     statistics_router,
     vision_router,
     mappls_router,
+    tomtom_router,
 )
 
 settings = get_settings()
@@ -130,6 +131,7 @@ app.include_router(incidents_router, prefix=settings.API_V1_PREFIX)
 app.include_router(statistics_router, prefix=settings.API_V1_PREFIX)
 app.include_router(vision_router, prefix=settings.API_V1_PREFIX)
 app.include_router(mappls_router, prefix=settings.API_V1_PREFIX)
+app.include_router(tomtom_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/")

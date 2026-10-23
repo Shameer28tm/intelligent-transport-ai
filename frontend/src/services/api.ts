@@ -384,5 +384,54 @@ export const api = {
     }
     return res.json();
   },
+
+  async getTomTomStatus(forceRefresh: boolean = false): Promise<import('../types').TomTomStatus> {
+    const res = await fetch(`${API_BASE}/tomtom/status${forceRefresh ? '?force_refresh=true' : ''}`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch TomTom status: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async getTomTomFlow(
+    lat: number,
+    lng: number,
+    zoom: number = 10,
+    unit: string = 'Kmh'
+  ): Promise<import('../types').TomTomFlowResponse> {
+    const params = new URLSearchParams({
+      lat: lat.toString(),
+      lng: lng.toString(),
+      zoom: zoom.toString(),
+      unit,
+    });
+    const res = await fetch(`${API_BASE}/tomtom/flow?${params.toString()}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || 'TomTom flow request failed');
+    }
+    return res.json();
+  },
+
+  async getTomTomIncidents(
+    bbox?: [number, number, number, number]
+  ): Promise<import('../types').TomTomIncidentsResponse> {
+    let url = `${API_BASE}/tomtom/incidents`;
+    if (bbox) {
+      const params = new URLSearchParams({
+        min_lon: bbox[0].toString(),
+        min_lat: bbox[1].toString(),
+        max_lon: bbox[2].toString(),
+        max_lat: bbox[3].toString(),
+      });
+      url += `?${params.toString()}`;
+    }
+    const res = await fetch(url);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || 'TomTom incidents request failed');
+    }
+    return res.json();
+  },
 };
 

@@ -56,12 +56,18 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
             <StatusBadge status={incident.status} />
             <span
               className={`rounded px-1.5 py-0.5 text-[10px] font-mono ${
-                incident.is_simulated
+                incident.data_source?.includes('TOMTOM')
+                  ? 'bg-sky-500/15 text-sky-400 border border-sky-500/30'
+                  : incident.is_simulated
                   ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
                   : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
               }`}
             >
-              {incident.is_simulated ? 'SIMULATED DEMO INCIDENT' : 'VERIFIED DISPATCH REPORT'}
+              {incident.data_source?.includes('TOMTOM')
+                ? 'TOMTOM LIVE TELEMETRY'
+                : incident.is_simulated
+                ? 'SIMULATED DEMO INCIDENT'
+                : 'VERIFIED DISPATCH REPORT'}
             </span>
           </div>
           <h4 className="text-sm font-semibold text-white leading-snug">{incident.title}</h4>
@@ -189,10 +195,12 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
         </div>
       </div>
 
-      {/* Demo Provenance tag */}
-      <div className="text-[10px] text-amber-400/90 font-mono border-t border-slate-800/80 pt-2 flex items-center justify-between">
+      {/* Provenance tag */}
+      <div className={`text-[10px] font-mono border-t border-slate-800/80 pt-2 flex items-center justify-between ${
+        incident.data_source?.includes('TOMTOM') ? 'text-sky-400' : 'text-amber-400/90'
+      }`}>
         <span>DATA SOURCE:</span>
-        <span>{incident.data_source}</span>
+        <span className="font-semibold">{incident.data_source}</span>
       </div>
     </div>
   );

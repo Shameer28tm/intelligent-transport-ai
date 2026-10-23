@@ -48,10 +48,13 @@ class Settings(BaseSettings):
     # Demo configuration
     DEMO_DATA_TAG: str = "SIMULATED DEMO DATA"
 
-    # Mappls (MapmyIndia) Integration
+    # Mappls (MapmyIndia) Integration (Legacy)
     MAPPLS_CLIENT_ID: str = ""
     MAPPLS_CLIENT_SECRET: str = ""
     MAPPLS_REST_KEY: str = ""
+
+    # TomTom Traffic API Integration (Server-Side Only)
+    TOMTOM_API_KEY: str = ""
 
     model_config = SettingsConfigDict(
         env_file=tuple(_env_files),

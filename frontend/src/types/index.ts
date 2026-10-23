@@ -469,6 +469,58 @@ export interface MapplsRouteResponse {
   fallback_active?: boolean;
 }
 
+export interface TomTomStatus {
+  provider: string;
+  status: 'OPERATIONAL' | 'AUTH_FAILED' | 'FORBIDDEN' | 'RATE_LIMITED' | 'NOT_CONFIGURED' | 'NETWORK_ERROR' | string;
+  http_status_code?: number;
+  is_operational: boolean;
+  is_configured: boolean;
+  masked_key: string;
+  fallback_active: boolean;
+  error?: string | null;
+  products_available: {
+    traffic_flow: boolean;
+    traffic_incidents: boolean;
+  };
+  attribution: string;
+  data_source: string;
+  timestamp: string;
+}
+
+export interface TomTomFlowResponse {
+  success: boolean;
+  provider: string;
+  current_speed_kmh?: number;
+  free_flow_speed_kmh?: number;
+  current_travel_time_sec?: number;
+  free_flow_travel_time_sec?: number;
+  congestion_pct?: number;
+  confidence?: number;
+  road_closure?: boolean;
+  functional_road_class?: string;
+  coordinates?: { latitude: number; longitude: number }[];
+  retrieval_time?: string;
+  attribution?: string;
+  data_source?: string;
+  error?: string;
+  http_status_code?: number;
+  fallback_active?: boolean;
+}
+
+export interface TomTomIncidentsResponse {
+  success: boolean;
+  provider: string;
+  count: number;
+  incidents: Incident[];
+  bbox?: [number, number, number, number];
+  attribution?: string;
+  data_source?: string;
+  retrieval_time?: string;
+  error?: string;
+  http_status_code?: number;
+  fallback_active?: boolean;
+}
+
 export type AppModule =
   | 'overview'
   | 'map'
