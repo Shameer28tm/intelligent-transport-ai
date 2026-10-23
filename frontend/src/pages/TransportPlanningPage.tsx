@@ -1,5 +1,5 @@
 import React from 'react';
-import { GitFork, Users, TrendingUp, Bus, ArrowRight } from 'lucide-react';
+import { GitFork, Users, TrendingUp, Bus, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export const TransportPlanningPage: React.FC = () => {
   const odFlows = [
@@ -10,50 +10,55 @@ export const TransportPlanningPage: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-bold text-white tracking-wide font-mono">
-          Transport Planning & Origin-Destination Modeling
-        </h2>
-        <p className="text-xs text-slate-400">
-          Regional macro-simulation, passenger corridor capacity, and multi-modal modal split analytics
-        </p>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-wide font-mono uppercase">
+            Transport Planning & Origin-Destination Modeling
+          </h2>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            Regional macro-simulation, passenger corridor capacity, and multi-modal split analytics
+          </p>
+        </div>
+        <span className="rounded bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/40 px-2.5 py-1 text-[11px] font-mono shadow-xs">
+          Model: Regional Four-Step Transit Matrix
+        </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-xl border border-slate-800 bg-[#0c1322]/80 p-4">
-          <span className="text-xs text-slate-400 uppercase font-mono">Peak Transit Mode Share</span>
-          <p className="text-2xl font-bold font-mono text-sky-400 mt-1">58.4%</p>
-          <p className="text-xs text-emerald-400 mt-1">+2.8% YoY shift from personal vehicles</p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] p-4 shadow-xs">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-mono">Peak Transit Mode Share</span>
+          <p className="text-2xl font-bold font-mono text-sky-600 dark:text-sky-400 mt-1">58.4%</p>
+          <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">+2.8% YoY shift from personal vehicles</p>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-[#0c1322]/80 p-4">
-          <span className="text-xs text-slate-400 uppercase font-mono">Regional Flow Capacity</span>
-          <p className="text-2xl font-bold font-mono text-amber-400 mt-1">82.1%</p>
-          <p className="text-xs text-slate-400 mt-1">Average peak hour bottleneck saturation</p>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] p-4 shadow-xs">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-mono">Regional Flow Capacity</span>
+          <p className="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1">82.1%</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Average peak hour bottleneck saturation</p>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-[#0c1322]/80 p-4">
-          <span className="text-xs text-slate-400 uppercase font-mono">2030 Demand Growth Projection</span>
-          <p className="text-2xl font-bold font-mono text-purple-400 mt-1">+14.2%</p>
-          <p className="text-xs text-slate-400 mt-1">Requires additional BRT frequency</p>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] p-4 shadow-xs">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-mono">2030 Demand Growth Projection</span>
+          <p className="text-2xl font-bold font-mono text-purple-600 dark:text-purple-400 mt-1">+14.2%</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Requires additional BRT frequency</p>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-800 bg-[#0c1322]/80 backdrop-blur-md p-5 shadow-xl">
-        <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider mb-4">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] p-5 shadow-xs">
+        <h3 className="text-xs font-bold text-slate-900 dark:text-white font-mono uppercase tracking-wider mb-4">
           Major Origin-Destination Travel Corridors
         </h3>
         <div className="space-y-3">
           {odFlows.map((flow, i) => (
-            <div key={i} className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 space-y-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-semibold text-white">
+            <div key={i} className="rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-900/40 p-4 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-semibold text-slate-900 dark:text-white">
                 <div className="flex items-center gap-2">
-                  <span className="text-sky-400">{flow.origin}</span>
+                  <span className="text-sky-600 dark:text-sky-400">{flow.origin}</span>
                   <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
-                  <span className="text-emerald-400">{flow.destination}</span>
+                  <span className="text-emerald-600 dark:text-emerald-400">{flow.destination}</span>
                 </div>
-                <span className="font-mono text-slate-300">{flow.volume}</span>
+                <span className="font-mono text-slate-300 text-[11px]">{flow.volume}</span>
               </div>
 
               <div>

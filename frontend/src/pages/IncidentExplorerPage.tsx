@@ -9,6 +9,7 @@ import {
   Clock,
   Layers,
   ChevronRight,
+  ShieldCheck,
 } from 'lucide-react';
 import { Incident, IncidentCategory, IncidentSeverity, IncidentStatus } from '../types';
 import { StatusBadge } from '../components/common/StatusBadge';
@@ -93,25 +94,30 @@ export const IncidentExplorerPage: React.FC<IncidentExplorerPageProps> = ({
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-white tracking-wide font-mono">
+          <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-wide font-mono uppercase">
             Incident Explorer & Audit Archive
           </h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-600 dark:text-slate-400">
             Query, filter, export, and inspect operational records across the transit grid
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          <span className="text-[11px] font-mono text-slate-600 dark:text-slate-400 mr-2">
+            Showing <strong className="text-slate-900 dark:text-white">{sorted.length}</strong> of {incidents.length}
+          </span>
           <button
+            type="button"
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-200 hover:text-white hover:border-slate-600 transition-colors shadow-sm"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:text-white dark:hover:border-slate-600 transition-colors shadow-xs"
           >
             <Download className="h-3.5 w-3.5" />
             <span>Export CSV</span>
           </button>
           <button
+            type="button"
             onClick={handleExportJSON}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-200 hover:text-white hover:border-slate-600 transition-colors shadow-sm"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:text-white dark:hover:border-slate-600 transition-colors shadow-xs"
           >
             <Download className="h-3.5 w-3.5" />
             <span>Export JSON</span>
@@ -120,7 +126,7 @@ export const IncidentExplorerPage: React.FC<IncidentExplorerPageProps> = ({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 rounded-2xl border border-slate-800 bg-[#0c1322]/80 backdrop-blur-md p-4 shadow-xl">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] p-3 shadow-xs">
         <div className="relative sm:col-span-2">
           <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
           <input
@@ -128,7 +134,7 @@ export const IncidentExplorerPage: React.FC<IncidentExplorerPageProps> = ({
             placeholder="Search by title, corridor, or location..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/80 pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 pl-9 pr-3 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:border-sky-500 focus:outline-none"
           />
         </div>
 
@@ -136,7 +142,7 @@ export const IncidentExplorerPage: React.FC<IncidentExplorerPageProps> = ({
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-300 focus:border-sky-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 px-3 py-1.5 text-xs text-slate-800 dark:text-slate-300 focus:border-sky-500 focus:outline-none"
           >
             <option value="ALL">All Categories</option>
             <option value="ACCIDENT">Accident</option>
@@ -153,7 +159,7 @@ export const IncidentExplorerPage: React.FC<IncidentExplorerPageProps> = ({
           <select
             value={severityFilter}
             onChange={(e) => setSeverityFilter(e.target.value)}
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-300 focus:border-sky-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 px-3 py-1.5 text-xs text-slate-800 dark:text-slate-300 focus:border-sky-500 focus:outline-none"
           >
             <option value="ALL">All Severities</option>
             <option value="CRITICAL">Critical</option>
@@ -167,7 +173,7 @@ export const IncidentExplorerPage: React.FC<IncidentExplorerPageProps> = ({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-300 focus:border-sky-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 px-3 py-1.5 text-xs text-slate-800 dark:text-slate-300 focus:border-sky-500 focus:outline-none"
           >
             <option value="ALL">All Statuses</option>
             <option value="REPORTED">Reported</option>
@@ -179,21 +185,21 @@ export const IncidentExplorerPage: React.FC<IncidentExplorerPageProps> = ({
       </div>
 
       {/* Main Table */}
-      <div className="rounded-2xl border border-slate-800 bg-[#0c1322]/80 backdrop-blur-md overflow-hidden shadow-xl">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/60 text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
-                <th className="py-3 px-4">Severity / Category</th>
-                <th className="py-3 px-4">Incident Title</th>
-                <th className="py-3 px-4">Corridor & Location</th>
-                <th className="py-3 px-4 text-center">Delay %</th>
-                <th className="py-3 px-4">Status Workflow</th>
-                <th className="py-3 px-4 text-right">Reported Time</th>
-                <th className="py-3 px-4 text-center">Action</th>
+              <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 text-[10px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider font-mono">
+                <th className="py-2.5 px-4">Severity / Category</th>
+                <th className="py-2.5 px-4">Incident Title</th>
+                <th className="py-2.5 px-4">Corridor & Location</th>
+                <th className="py-2.5 px-4 text-center">Delay %</th>
+                <th className="py-2.5 px-4">Status Workflow</th>
+                <th className="py-2.5 px-4 text-right">Reported Time</th>
+                <th className="py-2.5 px-4 text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-sans">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-sans">
               {sorted.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-500 text-xs">
@@ -204,50 +210,50 @@ export const IncidentExplorerPage: React.FC<IncidentExplorerPageProps> = ({
                 sorted.map((inc) => (
                   <tr
                     key={inc.id}
-                    className="hover:bg-slate-900/50 transition-colors group cursor-pointer"
+                    className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors group cursor-pointer"
                     onClick={() => onSelectIncident(inc)}
                   >
-                    <td className="py-3 px-4 whitespace-nowrap">
+                    <td className="py-2.5 px-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <StatusBadge severity={inc.severity} size="sm" />
-                        <span className="text-[10px] text-slate-400 font-mono">
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                           {inc.category.replace('_', ' ')}
                         </span>
                       </div>
                     </td>
 
-                    <td className="py-3 px-4 font-semibold text-white max-w-xs truncate group-hover:text-sky-300">
+                    <td className="py-2.5 px-4 font-semibold text-slate-900 dark:text-white max-w-xs truncate group-hover:text-sky-600 dark:group-hover:text-sky-300">
                       {inc.title}
                     </td>
 
-                    <td className="py-3 px-4 text-slate-300 max-w-xs truncate">
+                    <td className="py-2.5 px-4 text-slate-700 dark:text-slate-300 max-w-xs truncate">
                       <div>
                         <span>{inc.location_name}</span>
                         {inc.corridor && (
-                          <p className="text-[10px] text-slate-400">{inc.corridor}</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400">{inc.corridor}</p>
                         )}
                       </div>
                     </td>
 
-                    <td className="py-3 px-4 text-center font-mono">
+                    <td className="py-2.5 px-4 text-center font-mono">
                       <span
                         className={`font-bold ${
                           inc.congestion_level_pct > 75
-                            ? 'text-rose-400'
+                            ? 'text-rose-600 dark:text-rose-400'
                             : inc.congestion_level_pct > 40
-                            ? 'text-amber-400'
-                            : 'text-emerald-400'
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-emerald-600 dark:text-emerald-400'
                         }`}
                       >
                         {inc.congestion_level_pct}%
                       </span>
                     </td>
 
-                    <td className="py-3 px-4 whitespace-nowrap">
+                    <td className="py-2.5 px-4 whitespace-nowrap">
                       <StatusBadge status={inc.status} size="sm" />
                     </td>
 
-                    <td className="py-3 px-4 text-right text-[11px] font-mono text-slate-400 whitespace-nowrap">
+                    <td className="py-2.5 px-4 text-right text-[11px] font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
                       {new Date(inc.created_at).toLocaleString([], {
                         month: 'short',
                         day: 'numeric',
@@ -256,13 +262,15 @@ export const IncidentExplorerPage: React.FC<IncidentExplorerPageProps> = ({
                       })}
                     </td>
 
-                    <td className="py-3 px-4 text-center">
+                    <td className="py-2.5 px-4 text-center">
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           onSelectIncident(inc);
                         }}
-                        className="rounded p-1 text-slate-400 hover:text-sky-300 hover:bg-slate-800 transition-colors"
+                        className="rounded p-1 text-slate-400 hover:text-sky-600 dark:hover:text-sky-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        aria-label="Inspect incident"
                       >
                         <ChevronRight className="h-4 w-4" />
                       </button>

@@ -1,3 +1,4 @@
+from typing import Optional
 from app.config import get_settings
 from app.services.vision.base import BaseVisionService
 from app.services.vision.simulator import SimulatedVisionAdapter
@@ -6,12 +7,13 @@ from app.services.vision.real_adapter import RealVisionAdapter
 settings = get_settings()
 
 
-def get_vision_service() -> BaseVisionService:
+def get_vision_service(adapter_type: Optional[str] = None) -> BaseVisionService:
     """
-    Factory function returning the configured vision adapter.
-    Defaults to SimulatedVisionAdapter in development/Phase 1.
+    Factory function returning the configured or requested vision adapter.
+    Explicitly separates genuine neural model inference from deterministic simulation.
     """
-    if settings.VISION_ADAPTER.lower() == "real":
+    target = (adapter_type or settings.VISION_ADAPTER).strip().lower()
+    if target in ("real", "yolo", "onnx"):
         return RealVisionAdapter()
     return SimulatedVisionAdapter()
 

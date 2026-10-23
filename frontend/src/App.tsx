@@ -7,6 +7,8 @@ import { IncidentFormModal } from './components/incidents/IncidentFormModal';
 import { VisionUploadModal } from './components/vision/VisionUploadModal';
 
 import { OverviewPage } from './pages/OverviewPage';
+import { LiveMapPage } from './pages/LiveMapPage';
+import { TrafficIntelligencePage } from './pages/TrafficIntelligencePage';
 import { RoadSafetyPage } from './pages/RoadSafetyPage';
 import { TrafficManagementPage } from './pages/TrafficManagementPage';
 import { IncidentExplorerPage } from './pages/IncidentExplorerPage';
@@ -26,6 +28,26 @@ export const App: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isVisionModalOpen, setIsVisionModalOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Theme Management (Light mode default, dark mode preserved)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('theme');
+    return saved === 'dark' ? 'dark' : 'light';
+  });
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
 
   // Fetch telemetry and incidents
   const loadData = useCallback(async () => {
@@ -86,27 +108,32 @@ export const App: React.FC = () => {
   ).length;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#070b13] text-slate-100 font-sans">
-      {/* Sidebar Navigation */}
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-50 dark:bg-[#060a12] text-slate-800 dark:text-slate-100 font-sans transition-colors duration-150">
+      {/* Sidebar Navigation (with Mobile Drawer Support) */}
       <Sidebar
         activeModule={activeModule}
         onSelectModule={setActiveModule}
         criticalCount={criticalCount}
+        isOpenMobile={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
       {/* Main Workspace Column */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         {/* Top Operational Command Bar */}
         <Header
           health={health}
+          theme={theme}
+          onToggleTheme={toggleTheme}
           onOpenReportModal={() => setIsReportModalOpen(true)}
           onOpenVisionModal={() => setIsVisionModalOpen(true)}
           onRefresh={handleManualRefresh}
           isRefreshing={isRefreshing}
+          onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
         />
 
         {/* Dynamic Page Views */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-[#060a12] p-4 sm:p-6 transition-colors duration-150">
           {activeModule === 'overview' && (
             <OverviewPage
               incidents={incidents}
@@ -117,6 +144,18 @@ export const App: React.FC = () => {
               isLoading={isLoading}
             />
           )}
+
+          {activeModule === 'map' && (
+            <LiveMapPage
+              incidents={incidents}
+              selectedIncident={selectedIncident}
+              onSelectIncident={setSelectedIncident}
+              onUpdateStatus={handleUpdateStatus}
+              isLoading={isLoading}
+            />
+          )}
+
+          {activeModule === 'traffic-intelligence' && <TrafficIntelligencePage />}
 
           {activeModule === 'safety' && (
             <RoadSafetyPage
@@ -129,7 +168,12 @@ export const App: React.FC = () => {
             />
           )}
 
-          {activeModule === 'traffic' && <TrafficManagementPage incidents={incidents} />}
+          {activeModule === 'traffic' && (
+            <TrafficManagementPage
+              incidents={incidents}
+              onOpenVisionModal={() => setIsVisionModalOpen(true)}
+            />
+          )}
 
           {activeModule === 'explorer' && (
             <IncidentExplorerPage

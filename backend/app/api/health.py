@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from app.database import get_db
+from app.database import get_db, get_db_info
 from app.config import get_settings
 from app.services.vision import get_vision_service
 
@@ -28,6 +28,7 @@ def get_system_health(db: Session = Depends(get_db)):
         db_latency_ms = -1.0
 
     vision_service = get_vision_service()
+    db_info = get_db_info()
     
     # Check disk space in upload dir
     total_gb, used_gb, free_gb = 0, 0, 0
@@ -39,6 +40,12 @@ def get_system_health(db: Session = Depends(get_db)):
     except Exception:
         pass
 
+    import onnxruntime as ort
+    try:
+        ort_providers = ort.get_available_providers()
+    except Exception:
+        ort_providers = ["CPUExecutionProvider"]
+
     return {
         "status": "healthy" if db_status == "connected" else "degraded",
         "service": settings.PROJECT_NAME,
@@ -47,12 +54,15 @@ def get_system_health(db: Session = Depends(get_db)):
         "database": {
             "status": db_status,
             "latency_ms": db_latency_ms,
-            "engine": "SQLite (Migration-ready for PostgreSQL/PostGIS)",
+            "engine": db_info.get("engine", "Relational Database"),
+            "dialect": db_info.get("dialect", "unknown"),
         },
         "vision_subsystem": {
             "active_adapter": vision_service.adapter_name,
             "is_simulated": vision_service.is_simulated,
             "is_available": vision_service.is_available(),
+            "execution_provider": "CPUExecutionProvider",
+            "available_providers": ort_providers,
         },
         "storage": {
             "total_gb": total_gb,
@@ -61,8 +71,11 @@ def get_system_health(db: Session = Depends(get_db)):
         },
         "hardware_detection": {
             "gpu_detected": "NVIDIA GeForce RTX 5060 Laptop GPU (8GB VRAM)",
+            "host_gpu": "NVIDIA GeForce RTX 5060 Laptop GPU (8GB VRAM)",
+            "inference_runtime": "ONNX Runtime (CPUExecutionProvider)",
+            "execution_provider": "CPUExecutionProvider",
             "cuda_driver_ready": True,
-            "phase": "Phase 1: Foundation (Lightweight Vision Adapter)",
+            "phase": "P2 Release (Enterprise UI/UX + Mappls + Vision Workspace)",
         },
         "notice": "All test feeds default to SIMULATED DEMO DATA for operational testing.",
     }

@@ -32,6 +32,7 @@ class BaseVisionService(ABC):
         file_bytes: bytes,
         filename: str,
         content_type: str,
+        **kwargs,
     ) -> VisionAnalysisResult:
         """
         Analyze an image or video frame stream to detect vehicles, vulnerable road users,

@@ -1,12 +1,26 @@
-import React from 'react';
-import { TrafficCone, Gauge, Zap, Clock, Activity, ArrowUpRight } from 'lucide-react';
-import { Incident } from '../types';
+import React, { useState, useEffect } from 'react';
+import { TrafficCone, Gauge, Zap, Clock, Activity, ArrowUpRight, Layers, Scan, Sparkles } from 'lucide-react';
+import { Incident, VisionAnalysisHistoryItem } from '../types';
+import { api } from '../services/api';
 
 interface TrafficManagementPageProps {
   incidents: Incident[];
+  onOpenVisionModal?: () => void;
 }
 
-export const TrafficManagementPage: React.FC<TrafficManagementPageProps> = ({ incidents }) => {
+export const TrafficManagementPage: React.FC<TrafficManagementPageProps> = ({ incidents, onOpenVisionModal }) => {
+  const [latestVision, setLatestVision] = useState<VisionAnalysisHistoryItem | null>(null);
+
+  useEffect(() => {
+    api.getVisionHistory(1)
+      .then((records) => {
+        if (records && records.length > 0) {
+          setLatestVision(records[0]);
+        }
+      })
+      .catch((err) => console.warn('[TrafficPage] Failed to fetch latest vision history:', err));
+  }, []);
+
   const corridors = [
     {
       name: 'Market Street Transit Corridor',
@@ -65,15 +79,15 @@ export const TrafficManagementPage: React.FC<TrafficManagementPageProps> = ({ in
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-white tracking-wide font-mono">
-            Traffic Management & Corridor Performance
+          <h2 className="text-base font-bold text-white tracking-wide font-mono uppercase">
+            Traffic Management & Arterial Corridors
           </h2>
           <p className="text-xs text-slate-400">
-            Arterial speeds, Level of Service (LOS), signal timing splits, and automated congestion relief
+            Arterial speeds, Level of Service (LOS), adaptive signal synchronization, and CCTV traffic intelligence
           </p>
         </div>
 
@@ -84,63 +98,95 @@ export const TrafficManagementPage: React.FC<TrafficManagementPageProps> = ({ in
         </div>
       </div>
 
+      {/* Real CCTV Vision Intelligence Telemetry Card */}
+      {latestVision && (
+        <div className="rounded-xl border border-sky-200 dark:border-sky-500/30 bg-white dark:bg-[#0b1120] p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400">
+              <Scan className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold text-slate-900 dark:text-white font-mono">
+                  Active Vision AI Telemetry • {latestVision.filename}
+                </h4>
+                <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/40">
+                  REAL INFERENCE PERSISTED
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 font-mono">
+                {latestVision.unique_vehicles_tracked} Unique Tracked Vehicles • {latestVision.total_frame_detections} Total Detections • {latestVision.fps_processed ? `${latestVision.fps_processed.toFixed(1)} FPS` : `${latestVision.processing_time_ms.toFixed(0)} ms`}
+              </p>
+            </div>
+          </div>
+
+          {onOpenVisionModal && (
+            <button
+              type="button"
+              onClick={onOpenVisionModal}
+              className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-mono font-semibold flex items-center gap-1.5 transition-all self-start md:self-auto shadow-xs"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Open Vision Workspace</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Corridor Performance Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
         {corridors.map((corridor, i) => (
           <div
             key={i}
-            className="rounded-xl border border-slate-800 bg-[#0c1322]/80 backdrop-blur-md p-4 space-y-3 shadow-lg"
+            className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] p-4 space-y-3 shadow-xs"
           >
             <div className="flex items-start justify-between">
               <div>
-                <h4 className="text-xs font-bold text-white leading-snug">{corridor.name}</h4>
+                <h4 className="text-xs font-bold text-slate-900 dark:text-white leading-snug">{corridor.name}</h4>
                 <span
                   className={`inline-block mt-1 text-[10px] font-mono px-2 py-0.5 rounded ${
                     corridor.los.includes('LOS F')
-                      ? 'bg-red-950 text-red-300 border border-red-800'
+                      ? 'bg-rose-50 dark:bg-red-950 text-rose-700 dark:text-red-300 border border-rose-200 dark:border-red-800'
                       : corridor.los.includes('LOS D')
-                      ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                      : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                      ? 'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                      : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                   }`}
                 >
                   {corridor.los}
                 </span>
               </div>
-              <Gauge className="h-4 w-4 text-sky-400" />
-            </div>
 
-            <div className="rounded-lg bg-slate-900/60 p-2.5 border border-slate-800/80 space-y-2">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="text-slate-400">Operating Speed</span>
-                <span className="text-white font-bold">
-                  {corridor.speed} km/h{' '}
-                  <span className="text-slate-400 font-normal">/ {corridor.limit} km/h</span>
+              <div className="text-right">
+                <span className="text-sm font-bold font-mono text-slate-900 dark:text-white">
+                  {corridor.speed} <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">km/h</span>
                 </span>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
-                  <span>Congestion Index</span>
-                  <span className="text-amber-400 font-mono font-bold">{corridor.congestion}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${
-                      corridor.congestion > 75
-                        ? 'bg-rose-500'
-                        : corridor.congestion > 50
-                        ? 'bg-amber-500'
-                        : 'bg-emerald-500'
-                    }`}
-                    style={{ width: `${corridor.congestion}%` }}
-                  />
-                </div>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">Limit: {corridor.limit} km/h</p>
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+            {/* Delay & Congestion Progress Bar */}
+            <div>
+              <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+                <span>Congestion Delay Index</span>
+                <span className="font-mono text-slate-900 dark:text-white font-bold">{corridor.congestion}%</span>
+              </div>
+              <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    corridor.congestion > 75
+                      ? 'bg-rose-500'
+                      : corridor.congestion > 45
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${corridor.congestion}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-mono text-slate-400">
               <span>{corridor.signals}</span>
-              <span className="text-rose-400 font-mono">{corridor.transitDelay}</span>
+              <span className="text-sky-300">Delay: {corridor.transitDelay}</span>
             </div>
           </div>
         ))}

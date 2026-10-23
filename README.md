@@ -31,11 +31,12 @@ intelligent-transport-ai/
 │   │   │       ├── base.py            # Abstract BaseVisionService interface
 │   │   │       ├── simulator.py       # Deterministic demo simulator adapter
 │   │   │       └── real_adapter.py    # Production neural vision adapter (PyTorch/YOLO hook)
-│   │   ├── config.py                  # Pydantic BaseSettings configuration
-│   │   ├── database.py                # Database engine & session maker (Postgres-ready)
+│   │   ├── config.py                  # Pydantic BaseSettings configuration (deterministic .env.local precedence)
+│   │   ├── database.py                # Database engine & session maker (Neon Postgres + SQLite compatible)
 │   │   ├── seed.py                    # Seeder for realistic urban transport incidents
 │   │   └── main.py                    # FastAPI application entrypoint with CORS & lifespan
-│   ├── tests/                         # Pytest test suite (17 automated tests)
+│   ├── alembic/                       # Alembic migrations (PostgreSQL production schema)
+│   ├── tests/                         # Pytest test suite (40 automated tests)
 │   ├── requirements.txt               # Backend dependencies
 │   ├── pytest.ini                     # Pytest configuration
 │   └── .env.example                   # Backend environment variables template
@@ -84,8 +85,9 @@ intelligent-transport-ai/
 ### 1. Clone & Setup Backend
 
 ```powershell
-# Open terminal inside the workspace root
-cd c:\Users\shameer\OneDrive\Documents\intelligent-transport-ai
+# Clone the repository
+git clone https://github.com/Shameer28tm/intelligent-transport-ai.git
+cd intelligent-transport-ai
 
 # Create Python virtual environment inside backend
 python -m venv backend\.venv
@@ -93,11 +95,18 @@ python -m venv backend\.venv
 # Install backend dependencies
 .\backend\.venv\Scripts\pip.exe install -r backend\requirements.txt
 
-# Run backend automated test suite (17 tests)
-.\backend\.venv\Scripts\pytest.exe backend -v
+# (Optional) Download genuine pretrained YOLOv8n ONNX model weights (~12.85 MB)
+.\backend\.venv\Scripts\python.exe backend/app/services/vision/download_weights.py
 
-# Initialize database and seed simulated demo incidents
-.\backend\.venv\Scripts\python.exe -c "from app.database import Base, engine, SessionLocal; from app.seed import seed_database; Base.metadata.create_all(bind=engine); db = SessionLocal(); count = seed_database(db); print(f'Seeded {count} incidents successfully into transport.db')"
+# Run database migrations (applies schema up to head on configured database)
+cd backend
+.\.venv\Scripts\alembic.exe upgrade head
+cd ..
+
+# Run backend automated test suite (40 tests)
+cd backend
+.\.venv\Scripts\pytest.exe tests -v
+cd ..
 
 # Start the FastAPI backend server (Runs on port 8000)
 .\backend\.venv\Scripts\uvicorn.exe app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
@@ -108,15 +117,15 @@ python -m venv backend\.venv
 In a second PowerShell terminal:
 
 ```powershell
-cd c:\Users\shameer\OneDrive\Documents\intelligent-transport-ai\frontend
+cd intelligent-transport-ai/frontend
 
 # Install node dependencies
 npm install
 
-# Run TypeScript type check
+# Run TypeScript type check (0 errors)
 npm run typecheck
 
-# Build production bundle (or run dev server)
+# Build production bundle
 npm run build
 
 # Start Vite dev server (Runs on port 5173)
@@ -142,31 +151,26 @@ npm run dev
 ### Backend Tests
 Execute all automated tests via pytest:
 ```powershell
-.\backend\.venv\Scripts\pytest.exe backend -v
+cd backend
+.\.venv\Scripts\pytest.exe tests -v
 ```
-**Test Results: 17 Passed, 0 Failed (0.24s)**
+**Test Results: 40 Passed, 0 Failed, 0 Skipped (100% Pass Rate)**
 - `test_root_endpoint`: Verifies API root metadata and provenance flag.
-- `test_health_endpoint`: Verifies database latency, health status, and GPU detection.
-- `test_list_incidents_seeded`: Verifies paginated incident listing.
-- `test_filter_incidents_by_severity`: Tests severity filtering (`CRITICAL`, `HIGH`, etc.).
-- `test_filter_incidents_by_category`: Tests category filtering (`ACCIDENT`, `HAZARD`, etc.).
-- `test_bounding_box_filter`: Validates spatial bounding box query (`min_lat`, `max_lat`, `min_lng`, `max_lng`).
-- `test_create_incident_valid`: Tests incident creation with coordinate validation.
-- `test_create_incident_invalid_coordinates`: Ensures latitude > 90.0 or longitude < -180.0 is rejected with HTTP 422.
-- `test_get_incident_detail_and_404`: Verifies detail retrieval and HTTP 404 for non-existent records.
-- `test_patch_incident_status`: Tests status transition (`REPORTED` -> `RESOLVED`) and resolution timestamps.
-- `test_statistics_endpoint`: Validates KPI aggregations and 24-hour hourly trend histograms.
-- `test_vision_supported_formats`: Verifies supported image/video formats (`.jpg`, `.png`, `.mp4`, etc.).
-- `test_vision_status`: Tests vision adapter status endpoint.
-- `test_vision_analyze_valid_image`: Verifies image processing and structured detection results.
-- `test_vision_analyze_unsupported_format`: Verifies rejection of unsupported files with HTTP 415.
-- `test_vision_analyze_empty_file`: Verifies rejection of 0-byte uploads with HTTP 400.
-- `test_real_vision_adapter_unavailable_graceful_handling`: Verifies graceful failure when model weights are not loaded.
+- `test_health_endpoint`: Verifies database latency, health status, and hardware detection.
+- `test_database_migration`: Tests URL normalization, dialect isolation, and Alembic migrations.
+- `test_postgres_connectivity`: Validates real PostgreSQL connectivity, `SELECT 1`, and isolated CRUD lifecycle.
+- `test_session_persistence_idempotency`: Validates repeat requests idempotency, multi-thread concurrency safety, and history deduplication.
+- `test_incidents`: Tests incident listing, severity/category filtering, spatial bounding box queries, detail retrieval, and status updates.
+- `test_statistics`: Validates KPI aggregations and hourly trend histograms.
+- `test_mappls`: Verifies status, geocode, and routing endpoints with OAuth error handling.
+- `test_vision`: Tests format validation, demo simulator, and real neural vision inference.
+- `test_vision_p3`: Tests IoU box calculation, multi-object IoU tracker association, cordon crossing events, ground truth evaluation, and live frame streaming.
 
 ### Frontend Verification
 ```powershell
+cd frontend
 npm run typecheck    # TypeScript compiler check (0 errors)
-npm run build        # Vite production compilation
+npm run build        # Vite production compilation (0 errors)
 ```
 
 ---
@@ -202,28 +206,53 @@ class BaseVisionService(ABC):
     async def analyze_media(self, file_bytes: bytes, filename: str, content_type: str) -> VisionAnalysisResult: ...
 ```
 
-### Phase 1 Implementation
-- **SimulatedVisionAdapter**: Deterministic demo adapter that inspects real image dimensions, calculates content hashes, generates reproducible vehicle bounding boxes, pedestrian locations, speed estimates, collision risk scores, and actionable recommendations.
-- **Upload Validation**: Enforces safe limits (max 20 MB), validates file headers with Pillow, and allows image (`.jpg`, `.jpeg`, `.png`, `.webp`) and video (`.mp4`, `.mov`, `.webm`, `.avi`) formats.
-- **Hardware Telemetry**: Automatically detects the local GPU (**NVIDIA GeForce RTX 5060 Laptop GPU with 8GB VRAM and CUDA 13.3**).
+### P2 Release: Genuine YOLOv8n ONNX Vision Workspace
+- **Pretrained YOLOv8n ONNX Engine**: Model inference executes locally via ONNX Runtime (`CPUExecutionProvider`) with intra-op multi-threading.
+- **Interactive Video Timeline & Scrubber**: Native video player controls allowing transport engineers to seek to any second of video footage and pause.
+- **Selected-Frame Capture**: Browser-native HTML5 Canvas frame snapshotting at exact millisecond timestamps.
+- **Frame-Level Neural Inference Endpoint (`POST /api/vision/analyze-frame`)**: Dedicated endpoint analyzing selected frames with YOLOv8n, returning bounding box coordinates (`ymin, xmin, ymax, xmax`), COCO class labels, and confidence metrics.
+- **Structured Detection Inspector**: Interactive table displaying detected objects, bounding boxes, confidence values, and road hazard classifications.
+- **Persistent SQLite Audit History**: All analyzed videos and frames are saved with timestamps, object counts, execution provider metadata, and inspection links.
 
-### Phase 2 Roadmap: Real Vision Model Integration
-The detected hardware is capable of running YOLOv8, YOLOv11, or PyTorch road-safety models locally. To integrate real weights:
-1. Install `ultralytics` and `torch` with CUDA support:
-   ```bash
-   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
-   pip install ultralytics
-   ```
-2. Download road-safety weights to `backend/weights/road_safety_yolo.pt`.
-3. Set `VISION_ADAPTER=real` in `.env`.
-4. Implement the forward pass in `RealVisionAdapter.analyze_media()`.
+### P3 Release: Traffic Intelligence, Live Playback Detection & Sequential Tracking
+- **Playback-Synchronized Live Video Detection**: Users upload prerecorded traffic video, press **Start Live Detection**, and see genuine local YOLOv8n ONNX inference overlays moving synchronously with the real `<video>` player.
+- **Single-Flight Backpressure & Zero Lag**: Enforces at most one active frame inference request per playback session. If inference latency exceeds the frame interval, subsequent frames are skipped rather than queued, guaranteeing zero accumulated lag.
+- **Timestamp & Seek Invalidation**: Maintains seek sequence numbers (`seekSeq`); seeking through the video immediately clears old bounding boxes and discards in-flight requests from earlier timestamps.
+- **Letterbox-Aware Canvas Overlay**: Computes dynamic coordinate mapping between intrinsic video resolution and rendered canvas dimensions, handling aspect ratios and letterboxing without stretching.
+- **Multi-Object Vehicle Tracker (IoU Tracker)**: Associates bounding boxes across consecutive frames using hybrid IoU and centroid proximity matching. Assigns persistent, session-scoped `track_id`s across live frames without persisting unneeded single-frame DB rows.
+- **Live Session Persistence**: Supports on-demand consolidated session summary persistence (`POST /api/vision/live-session/summary`) to store traffic volume, tracked vehicles, and breakdown into SQLite history.
+- **Virtual Cordon Line & Roadway Events**: Tracks vehicles as they cross a configurable horizontal cordon line (e.g., $y = 0.60$), emitting timestamped directional events (`CORDON_CROSSING`, `SOUTHBOUND` / `NORTHBOUND`).
+- **Time-Bucketed Traffic Volume Trends**: Aggregates vehicle and pedestrian detections into configurable time windows (e.g. 1s, 2s, 5s), calculating active unique vehicles, frame detection sums, and corridor congestion levels.
+- **Defensible Metric Differentiation**: Strictly distinguishes `total_frame_detections` (cumulative sum across frames) from `unique_vehicles_tracked` (deduped identities via IoU tracking).
+- **Ground-Truth Evaluation Engine (`POST /api/vision/evaluate`)**: Implements bipartite greedy IoU matching against annotated ground-truth datasets. Computes Precision, Recall, F1 score, True Positives, False Positives, Missed Detections (FN), and Mean IoU both overall and class-by-class.
+- **Coherent Navigation Architecture**:
+  - **Primary Operations**: Overview, Live Map (MapLibre + Esri fallback), Traffic Intelligence (full 6-subsection workspace), Incidents Explorer, and Settings & Health.
+  - **Traffic Intelligence Subsections**:
+    1. *Live Playback Detection*: Playback-synchronized live YOLOv8n ONNX overlay, live latency and effective FPS telemetry, cordon line, and seek controls.
+    2. *Full Video Analysis*: Offline sequential frame sampling, peak representative frame, and persistent DB storage.
+    3. *Traffic Analytics*: Volume trend charts (SVG time buckets) and interval analysis tables.
+    4. *Vehicle Tracking & Events*: Multi-object IoU trajectory tracking and virtual cordon event stream.
+    5. *Model Evaluation*: IoU benchmark evaluation against ground-truth datasets.
+    6. *Analysis History*: Persistent SQLite history inspection and replay.
+
+---
+
+## 🗺️ Mappls (MapmyIndia) Geospatial Integration
+
+- **Secure Backend Proxy Architecture**: Client credentials (`MAPPLS_CLIENT_ID`, `MAPPLS_CLIENT_SECRET`) reside exclusively on the FastAPI backend. No server secrets are ever exposed in frontend client bundles, network responses, or git commits.
+- **Server-Side OAuth2 Token Management**: Automatic token acquisition and caching against Mappls Outpost OAuth2 server (`https://outpost.mappls.com/api/security/oauth/token`).
+- **Integrated API Endpoints**:
+  - `GET /api/mappls/status`: Diagnostic endpoint reporting client ID (masked, e.g. `9336...ddd8`), token validity, and API reachability.
+  - `GET /api/mappls/geocode`: Forward geocoding and address search proxy.
+  - `POST /api/mappls/route`: Driving route and corridor calculation proxy.
+- **Graceful Resilient Fallback**: If Mappls credentials are invalid (e.g. `HTTP 401 Bad client credentials`) or quota is exhausted, the application displays an honest diagnostic notice and automatically falls back to keyless Esri Dark Canvas raster tiles, keeping all incident overlays, telemetry, and spatial filters 100% operational.
 
 ---
 
 ## 📊 Provenance & Data Integrity
 
 In accordance with strict operational integrity:
-> **Notice**: Demonstration incidents and simulator outputs are explicitly tagged as `SIMULATED DEMO DATA`. Live municipal feeds or external production services are not fabricated.
+> **Notice**: Demonstration incidents and simulator outputs are explicitly tagged as `SIMULATED DEMO DATA`. Genuine YOLOv8n ONNX inference is explicitly tagged as `REAL LOCAL INFERENCE (CPUExecutionProvider)`. Live municipal feeds or external production services are not fabricated.
 
 ---
 
@@ -240,6 +269,11 @@ CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
 MAX_UPLOAD_SIZE_BYTES=20971520
 VISION_ADAPTER=simulator
 
+# Mappls (MapmyIndia) Geospatial Integration (Server-Side Only)
+MAPPLS_CLIENT_ID=your_mappls_client_id_here
+MAPPLS_CLIENT_SECRET=your_mappls_client_secret_here
+MAPPLS_REST_KEY=
+
 # Frontend
 VITE_API_BASE_URL=http://localhost:8000/api
 VITE_MAP_DEFAULT_LAT=37.7749
@@ -252,8 +286,8 @@ VITE_DATA_PROVENANCE="SIMULATED DEMO DATA"
 
 ## 🔒 Security & Credentials
 
-- No API keys, passwords, or personal credentials are required for the Phase 1 launch.
-- No map-provider tokens are baked into client bundles.
+- Server-side secrets are isolated in git-ignored `.env` files.
+- Masked diagnostics only display safe substrings (first 4 and last 4 characters).
 - File uploads are validated in memory with strict size limits to prevent Denial of Service.
 - All database operations utilize parameterized SQLAlchemy queries preventing SQL injection.
 
@@ -262,3 +296,5 @@ VITE_DATA_PROVENANCE="SIMULATED DEMO DATA"
 ## 📄 License
 
 Apache License 2.0. Built for urban transport intelligence and road safety research.
+
+
