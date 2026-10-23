@@ -138,6 +138,96 @@ export interface TrackingSummary {
   events: TrafficEvent[];
   tracking_algorithm: string;
   limitations_notice: string;
+  risk_events?: PremonitionEvent[];
+}
+
+// ==========================================
+// Traffic Premonition (trajectory risk estimate)
+// Distances are image-plane "fh" units (fraction of frame height), not metres.
+// ==========================================
+export type PremonitionState =
+  | 'MONITORING'
+  | 'POTENTIAL_CONFLICT'
+  | 'INSUFFICIENT_EVIDENCE'
+  | 'NO_CONFLICT_DETECTED';
+
+export type PremonitionDataQuality = 'HIGH' | 'MEDIUM' | 'LOW' | 'INSUFFICIENT';
+
+export interface PremonitionPathPoint {
+  x: number;
+  y: number;
+  timestamp_sec: number;
+}
+
+export interface PremonitionTrack {
+  track_id: number;
+  class_name: string | null;
+  data_quality: PremonitionDataQuality;
+  quality_reasons: string[];
+  observation_count: number;
+  observed_span_sec: number;
+  fit_rms_fh: number | null;
+  mean_detection_confidence: number | null;
+  velocity_fh_per_s: { vx: number; vy: number } | null;
+  observed_path: PremonitionPathPoint[];
+  projected_path: PremonitionPathPoint[];
+}
+
+export interface PremonitionMeasurements {
+  current_separation_fh: number;
+  closest_projected_separation_fh: number;
+  separation_threshold_fh: number;
+  time_to_closest_approach_sec: number | null;
+  closing_speed_fh_per_s: number;
+  relative_speed_fh_per_s: number;
+  projected_gap_reduction_fh: number;
+  heading_difference_deg: number | null;
+  interaction_geometry: string;
+  horizon_sec: number;
+}
+
+export interface PremonitionPair {
+  track_ids: [number, number];
+  class_names: (string | null)[];
+  state: PremonitionState;
+  reasons: string[];
+  measurements: PremonitionMeasurements;
+}
+
+export interface PremonitionEvent {
+  event_id: string;
+  track_ids: [number, number];
+  class_names: (string | null)[];
+  first_detected_sec: number;
+  last_detected_sec: number;
+  status: 'ACTIVE' | 'CLOSED' | 'INTERRUPTED';
+  update_count: number;
+  kind: string;
+  is_prediction: true;
+  peak: {
+    timestamp_sec: number;
+    measurements: PremonitionMeasurements;
+    reasons: string[];
+    tracks: PremonitionTrack[];
+  };
+}
+
+export interface PremonitionResult {
+  engine: string;
+  state: PremonitionState;
+  reasons: string[];
+  reason_text: Record<string, string>;
+  timestamp_sec: number | null;
+  units: Record<string, string>;
+  pairs_evaluated: number;
+  pairs_pruned: number;
+  pairs: PremonitionPair[];
+  tracks: PremonitionTrack[];
+  active_event_ids: string[];
+  events: PremonitionEvent[];
+  config: Record<string, number>;
+  limitations: string[];
+  is_prediction: true;
 }
 
 export interface ClassEvaluationMetrics {
@@ -212,6 +302,7 @@ export interface VisionAnalysisResult {
   evaluation_summary?: EvaluationSummary | null;
   fps_processed?: number;
   inference_config?: Record<string, any>;
+  premonition?: PremonitionResult | null;
   recommendations: string[];
   timestamp: string;
   data_source?: string;

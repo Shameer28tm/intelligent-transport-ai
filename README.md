@@ -154,7 +154,7 @@ Execute all automated tests via pytest:
 cd backend
 .\.venv\Scripts\pytest.exe tests -v
 ```
-**Test Results: 40 Passed, 0 Failed, 0 Skipped (100% Pass Rate)**
+**Test Results: 64 Passed, 0 Failed, 0 Skipped (100% Pass Rate)**
 - `test_root_endpoint`: Verifies API root metadata and provenance flag.
 - `test_health_endpoint`: Verifies database latency, health status, and hardware detection.
 - `test_database_migration`: Tests URL normalization, dialect isolation, and Alembic migrations.
@@ -165,6 +165,7 @@ cd backend
 - `test_mappls`: Verifies status, geocode, and routing endpoints with OAuth error handling.
 - `test_vision`: Tests format validation, demo simulator, and real neural vision inference.
 - `test_vision_p3`: Tests IoU box calculation, multi-object IoU tracker association, cordon crossing events, ground truth evaluation, and live frame streaming.
+- `test_risk_estimator`: Validates constant-velocity trajectory projections, conflict reason codes, boundary approach handling, backward seek interruption, tracker integration, and end-to-end premonition payload delivery.
 
 ### Frontend Verification
 ```powershell
@@ -234,6 +235,22 @@ class BaseVisionService(ABC):
     4. *Vehicle Tracking & Events*: Multi-object IoU trajectory tracking and virtual cordon event stream.
     5. *Model Evaluation*: IoU benchmark evaluation against ground-truth datasets.
     6. *Analysis History*: Persistent SQLite history inspection and replay.
+
+---
+
+## 🔮 Traffic Premonition (Trajectory Risk Estimate — Prototype)
+
+Live Playback Detection now estimates potential vehicle conflicts from the **existing tracker output** (same YOLOv8n detections and track IDs; no second inference pass).
+
+- **Engine:** `backend/app/services/vision/risk_estimator.py`. It is deterministic and pure Python, with a constant-velocity least-squares fit over a rolling window of at most 12 observations within 2.5 s. It projects 1.5 s ahead and computes the closest projected separation and the time to closest approach for nearby vehicle pairs.
+- **States:** `MONITORING`, `NO_CONFLICT_DETECTED`, `POTENTIAL_CONFLICT`, `INSUFFICIENT_EVIDENCE`. The engine needs at least 4 observations spanning 0.5 s, plus consistent motion, before it projects anything.
+- **Explainability:** every estimate carries reason codes, measurements and per-track data quality. The UI's **"Why this warning?"** shows the observed path (solid) and the projected path (dashed), the measurements against their thresholds, the timestamp (with a "Pause at" seek), and the limitations.
+- **Lifecycle:** one event per vehicle pair while the interaction lasts. A backwards seek clears trajectories and marks open events `INTERRUPTED`, and Reset Session clears everything. Saved live sessions keep estimates under `tracking_summary.risk_events`, labelled as predictions. Nothing is written to incident history.
+- **Fallback:** untick **Show trajectory overlay** to return to the original detection view. Detection, tracking, Save and History are unchanged.
+
+**Limitations (also shown in the UI):** this is an image-plane estimate. Distances are in *fh* (fraction of frame height), not metres, and times are video seconds under a straight-line projection, not a calibrated time-to-collision. Perspective, turning, braking, occlusion and tracker ID switches are not modelled. This is not a probability or a guarantee of a collision, and it has not been validated against labelled real-world conflicts.
+
+Tests: `backend/tests/test_risk_estimator.py` (synthetic trajectories only).
 
 ---
 

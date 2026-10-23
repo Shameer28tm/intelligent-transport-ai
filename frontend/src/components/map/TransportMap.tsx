@@ -344,7 +344,7 @@ export const TransportMap: React.FC<TransportMapProps> = ({
         const msg = e.error?.message || e.message || '';
         if (msg.includes('401') || msg.includes('403') || msg.includes('fetch') || msg.includes('network')) {
           setTileError(
-            'Basemap tile connection issue. Incident markers and spatial telemetry remain 100% operational.'
+            'Basemap tiles could not load. Incident markers and filters still work on the fallback grid.'
           );
         }
       });

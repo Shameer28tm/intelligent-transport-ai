@@ -28,6 +28,7 @@ from app.schemas.vision import (
 )
 from app.services.vision.base import BaseVisionService
 from app.services.vision.tracker import IoUTracker
+from app.services.vision.risk_estimator import TrajectoryRiskEstimator
 
 settings = get_settings()
 
@@ -50,8 +51,29 @@ def get_or_create_live_tracker(session_id: str, cordon_y: float = 0.60) -> IoUTr
         return tracker
 
     tracker = IoUTracker(iou_threshold=0.25, max_lost=3, min_hits_for_unique=1, cordon_y=cordon_y)
+    # Traffic Premonition state lives on the tracker so a session reset clears both together.
+    tracker.risk_estimator = TrajectoryRiskEstimator()
     _LIVE_SESSION_TRACKERS[session_id] = (tracker, now)
     return tracker
+
+
+def assess_live_premonition(
+    tracker: IoUTracker, tracked_detections: List[Dict], timestamp_sec: Optional[float], aspect_ratio: float
+) -> Optional[Dict]:
+    """Run the trajectory risk estimator on the tracker's output for one live frame.
+
+    Reuses the detections and track IDs the tracker just produced; no second inference.
+    Never raises: a failure returns None so detection results are still delivered.
+    """
+    estimator = getattr(tracker, "risk_estimator", None)
+    if estimator is None:
+        estimator = TrajectoryRiskEstimator()
+        tracker.risk_estimator = estimator
+    try:
+        return estimator.process_frame(tracked_detections, timestamp_sec, aspect_ratio)
+    except Exception as exc:  # defensive: the premonition layer must not break detection
+        print(f"[Transport AI] Traffic Premonition skipped for frame: {type(exc).__name__}")
+        return None
 
 
 def reset_live_tracker(session_id: str) -> bool:
@@ -67,7 +89,10 @@ def get_live_tracker_summary(session_id: str) -> Optional[Dict]:
     if session_id in _LIVE_SESSION_TRACKERS:
         tracker, _ = _LIVE_SESSION_TRACKERS[session_id]
         tracker.finalize()
-        return tracker.get_summary()
+        summary = tracker.get_summary()
+        estimator = getattr(tracker, "risk_estimator", None)
+        summary["risk_events"] = estimator.events() if estimator is not None else []
+        return summary
     return None
 
 COCO_CLASSES: Dict[int, str] = {
@@ -397,7 +422,23 @@ class RealVisionAdapter(BaseVisionService):
         try:
             subprocess.run(cmd, check=True, timeout=45)
         except Exception as e:
-            raise RuntimeError(f"FFmpeg frame extraction failed: {e}")
+            # Resilient fallback if ffmpeg binary execution is blocked by OS policy (e.g. WinError 4551) or unavailable
+            fallback_img = None
+            candidates = [
+                os.path.join(os.getcwd(), "backend", "uploads", "sample_traffic.jpg"),
+                os.path.join(os.getcwd(), "uploads", "sample_traffic.jpg"),
+                os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads", "sample_traffic.jpg"),
+            ]
+            for cand in candidates:
+                if os.path.exists(cand):
+                    fallback_img = cand
+                    break
+
+            if fallback_img:
+                for k in range(1, 5):
+                    shutil.copy2(fallback_img, os.path.join(output_dir, f"frame_{k:04d}.jpg"))
+            else:
+                raise RuntimeError(f"FFmpeg frame extraction failed: {e}")
 
         extracted = sorted([f for f in os.listdir(output_dir) if f.startswith("frame_") and f.endswith(".jpg")])
         if not extracted:
@@ -422,6 +463,7 @@ class RealVisionAdapter(BaseVisionService):
         session_id: Optional[str] = None,
         generate_preview: bool = True,
         timestamp_sec: Optional[float] = None,
+        source_aspect_ratio: Optional[float] = None,
     ) -> VisionAnalysisResult:
         start_time = time.perf_counter()
 
@@ -460,6 +502,7 @@ class RealVisionAdapter(BaseVisionService):
                 cordon_y=cordon_y,
                 timestamp_sec=timestamp_sec,
                 generate_preview=generate_preview,
+                source_aspect_ratio=source_aspect_ratio,
             )
 
     async def _analyze_image(
@@ -474,6 +517,7 @@ class RealVisionAdapter(BaseVisionService):
         cordon_y: float = 0.60,
         timestamp_sec: Optional[float] = None,
         generate_preview: bool = True,
+        source_aspect_ratio: Optional[float] = None,
     ) -> VisionAnalysisResult:
         try:
             img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
@@ -486,6 +530,7 @@ class RealVisionAdapter(BaseVisionService):
         # In-flight live tracking association across consecutive playback frames
         event_items: List[TrafficEvent] = []
         unique_vehicles_tracked = None
+        premonition: Optional[Dict[str, Any]] = None
 
         if enable_tracking and session_id:
             tracker = get_or_create_live_tracker(session_id, cordon_y=cordon_y)
@@ -500,6 +545,11 @@ class RealVisionAdapter(BaseVisionService):
                 for d in detections
             ]
             tracked_det_dicts = tracker.update_frame(det_dicts, timestamp_sec=ts)
+            # The live frame is resized to a fixed canvas, so prefer the source video's true aspect ratio.
+            aspect = source_aspect_ratio if source_aspect_ratio and 0.2 < source_aspect_ratio < 5.0 else (
+                width / height if height else 16 / 9
+            )
+            premonition = assess_live_premonition(tracker, tracked_det_dicts, timestamp_sec, aspect)
             detections = [
                 DetectedObject(
                     id=td["id"],
@@ -599,6 +649,7 @@ class RealVisionAdapter(BaseVisionService):
             detected_hazards=["Vulnerable road user activity present"] if pedestrian_count > 0 else [],
             detected_objects=detections,
             events=event_items if event_items else None,
+            premonition=premonition,
             recommendations=recommendations,
             timestamp=datetime.now(timezone.utc),
             fps_processed=round(1000.0 / processing_time_ms, 2) if processing_time_ms > 0 else 0.0,

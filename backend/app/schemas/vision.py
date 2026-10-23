@@ -75,6 +75,8 @@ class TrackingSummary(BaseModel):
     tracks: List[TrackedVehicleItem] = []
     events: List[TrafficEvent] = []
     tracking_algorithm: str = "Sequential IoU Tracker"
+    # Traffic Premonition candidate events (image-plane risk estimates, never confirmed incidents)
+    risk_events: List[Dict[str, Any]] = []
     limitations_notice: str = (
         "Tracking identities are scoped to the current video analysis session. "
         "Track IDs may reset after occlusion or vehicle re-entry."
@@ -160,6 +162,10 @@ class VisionAnalysisResult(BaseModel):
     evaluation_summary: Optional[EvaluationSummary] = None
     fps_processed: float = 0.0
     inference_config: Optional[Dict[str, Any]] = None
+
+    # Traffic Premonition: deterministic trajectory risk estimate for live tracked frames.
+    # Image-plane units (fraction of frame height); not a probability and not an incident record.
+    premonition: Optional[Dict[str, Any]] = None
     
     detected_objects: List[DetectedObject]
     recommendations: List[str]

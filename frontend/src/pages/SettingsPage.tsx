@@ -136,25 +136,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 CPUExecutionProvider
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600 dark:text-slate-400">Physical Host Device:</span>
-              <span className="text-slate-900 dark:text-white font-mono text-[11px] truncate max-w-[160px]">
-                {hostGpu || 'Host GPU Available'}
-              </span>
-            </div>
+            {hostGpu && (
+              <div className="flex justify-between">
+                <span className="text-slate-600 dark:text-slate-400">Detected GPU (not used for inference):</span>
+                <span className="text-slate-900 dark:text-white font-mono text-[11px] truncate max-w-[160px]">{hostGpu}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-slate-600 dark:text-slate-400">Vision Architecture:</span>
               <span className="text-sky-700 dark:text-sky-300 font-mono">YOLOv8n ONNX (Pretrained)</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600 dark:text-slate-400">Intra-op Threads:</span>
-              <span className="text-slate-900 dark:text-white font-mono">4 Cores Optimized</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600 dark:text-slate-400">GPU Acceleration:</span>
-              <span className="text-amber-600 dark:text-amber-400 font-mono text-[11px]">
-                Driver Ready • CPU Active
-              </span>
             </div>
           </div>
         </div>

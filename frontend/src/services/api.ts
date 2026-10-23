@@ -197,6 +197,7 @@ export const api = {
       session_id?: string;
       cordon_y?: number;
       confidence_threshold?: number;
+      source_aspect_ratio?: number;
     }
   ): Promise<VisionAnalysisResult> {
     const formData = new FormData();
@@ -215,6 +216,9 @@ export const api = {
     }
     if (options?.session_id) {
       formData.append('session_id', options.session_id);
+    }
+    if (options?.source_aspect_ratio && Number.isFinite(options.source_aspect_ratio)) {
+      formData.append('source_aspect_ratio', options.source_aspect_ratio.toString());
     }
 
     const params = new URLSearchParams();

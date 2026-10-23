@@ -333,6 +333,7 @@ async def analyze_video_frame(
     timestamp_sec: Optional[float] = Form(None),
     video_filename: Optional[str] = Form(None),
     session_id: Optional[str] = Form(None),
+    source_aspect_ratio: Optional[float] = Form(None, description="Source video width/height (live frames are resized)"),
     adapter: Optional[str] = Query(None, description="Force adapter: 'real' or 'simulator'"),
     persist: bool = Query(True, description="Persist frame in SQLite history (set False for live playback streaming)"),
     enable_tracking: bool = Query(False, description="Associate detections across consecutive live frames"),
@@ -376,6 +377,7 @@ async def analyze_video_frame(
                 session_id=session_id,
                 generate_preview=generate_preview,
                 timestamp_sec=timestamp_sec,
+                source_aspect_ratio=source_aspect_ratio,
             )
         else:
             result = await service.analyze_media(

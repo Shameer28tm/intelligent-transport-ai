@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Activity,
   AlertTriangle,
-  Cpu,
   PlusCircle,
   ScanEye,
   RefreshCw,
@@ -36,11 +35,6 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleMobileSidebar,
 }) => {
   const isHealthy = health?.status === 'healthy';
-  const runtimeProvider =
-    health?.vision_subsystem?.execution_provider ||
-    health?.hardware_detection?.inference_runtime ||
-    'ONNX CPUExecutionProvider';
-  const hostGpu = health?.hardware_detection?.host_gpu || health?.hardware_detection?.gpu_detected;
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#070b13]/95 px-4 sm:px-6 backdrop-blur-md transition-colors duration-150">
@@ -67,11 +61,11 @@ export const Header: React.FC<HeaderProps> = ({
                 Intelligent Transport AI
               </span>
               <span className="rounded bg-sky-50 dark:bg-sky-950/80 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/50">
-                P4 PRODUCTION
+                Prototype
               </span>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">
-              Enterprise Transport Intelligence • Mappls • Vision AI
+              Traffic operations and road-safety intelligence
             </p>
           </div>
         </div>
@@ -85,18 +79,6 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right: Telemetry Badges & Primary Actions */}
       <div className="flex items-center gap-2.5">
-        {/* Real Hardware & Runtime Provider Badge */}
-        <div
-          className="hidden lg:flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-2.5 py-1 text-xs text-slate-700 dark:text-slate-300"
-          title={`Inference Runtime: ${runtimeProvider} (Host: ${hostGpu || 'Intel/AMD CPU'})`}
-        >
-          <Cpu className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
-          <span className="text-slate-500 dark:text-slate-400">Inference:</span>
-          <span className="font-mono text-slate-800 dark:text-white text-[11px]">
-            {runtimeProvider.includes('CPU') ? 'CPUExecutionProvider' : runtimeProvider}
-          </span>
-        </div>
-
         {/* Backend Health Badge */}
         <div className="flex items-center gap-2 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-2.5 py-1 text-xs">
           <span
