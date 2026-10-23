@@ -380,24 +380,52 @@ class RealVisionAdapter(BaseVisionService):
         return f"data:image/jpeg;base64,{b64}"
 
     def _probe_video_metadata(self, video_path: str) -> Tuple[float, int, int]:
-        """Extract video duration and resolution using ffprobe or fallback."""
+        """Extract video duration and resolution using ffprobe.
+
+        Raises RuntimeError with actionable error message if ffprobe is unavailable,
+        fails, or returns invalid duration/dimensions. Never invents metadata.
+        """
         cmd = [
             "ffprobe",
             "-v", "error",
-            "-show_entries", "format=duration:stream=width,height",
+            "-show_entries", "format=duration:stream=width,height,duration",
             "-of", "json",
             video_path,
         ]
         try:
             res = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=10)
             data = json.loads(res.stdout)
-            duration = float(data.get("format", {}).get("duration", 0.0))
-            streams = data.get("streams", [{}])
-            width = int(streams[0].get("width", 1280)) if streams else 1280
-            height = int(streams[0].get("height", 720)) if streams else 720
+            format_duration = data.get("format", {}).get("duration")
+            streams = data.get("streams", [])
+            stream_duration = streams[0].get("duration") if streams else None
+
+            dur_str = format_duration or stream_duration
+            if dur_str is None:
+                raise ValueError("Video duration metadata is missing.")
+            duration = float(dur_str)
+            if duration <= 0.0:
+                raise ValueError(f"Video duration is non-positive ({duration}s).")
+
+            width = int(streams[0].get("width", 0)) if streams else 0
+            height = int(streams[0].get("height", 0)) if streams else 0
+            if width <= 0 or height <= 0:
+                raise ValueError(f"Invalid video stream resolution ({width}x{height}).")
+
             return duration, width, height
-        except Exception:
-            return 3.0, 1280, 720
+        except FileNotFoundError:
+            raise RuntimeError(
+                "ffprobe executable not found on PATH. "
+                "Please install FFmpeg (https://ffmpeg.org) or ensure ffprobe is available in system PATH "
+                "for server-side video analysis."
+            )
+        except subprocess.CalledProcessError as cpe:
+            err_msg = cpe.stderr.strip() if cpe.stderr else str(cpe)
+            raise RuntimeError(f"ffprobe failed to inspect video file: {err_msg}")
+        except Exception as e:
+            raise RuntimeError(
+                f"Video metadata extraction failed: {str(e)}. "
+                "Ensure ffprobe is available and the input file is a valid H.264/MP4 video."
+            )
 
     def _sample_video_frames(
         self,
@@ -409,6 +437,7 @@ class RealVisionAdapter(BaseVisionService):
         """
         Sample frames from video using ffmpeg at specified FPS.
         Returns list of (frame_filepath, timestamp_seconds) strictly sorted by timestamp.
+        Raises RuntimeError if ffmpeg is unavailable or fails. Never substitutes static images.
         """
         output_pattern = os.path.join(output_dir, "frame_%04d.jpg")
         cmd = [
@@ -420,25 +449,18 @@ class RealVisionAdapter(BaseVisionService):
             output_pattern,
         ]
         try:
-            subprocess.run(cmd, check=True, timeout=45)
+            subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=45)
+        except FileNotFoundError:
+            raise RuntimeError(
+                "ffmpeg executable not found on PATH. "
+                "Please install FFmpeg (https://ffmpeg.org) or add ffmpeg to system PATH "
+                "for server-side video frame extraction."
+            )
+        except subprocess.CalledProcessError as cpe:
+            err_msg = cpe.stderr.strip() if cpe.stderr else str(cpe)
+            raise RuntimeError(f"FFmpeg video frame decoding failed: {err_msg}")
         except Exception as e:
-            # Resilient fallback if ffmpeg binary execution is blocked by OS policy (e.g. WinError 4551) or unavailable
-            fallback_img = None
-            candidates = [
-                os.path.join(os.getcwd(), "backend", "uploads", "sample_traffic.jpg"),
-                os.path.join(os.getcwd(), "uploads", "sample_traffic.jpg"),
-                os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads", "sample_traffic.jpg"),
-            ]
-            for cand in candidates:
-                if os.path.exists(cand):
-                    fallback_img = cand
-                    break
-
-            if fallback_img:
-                for k in range(1, 5):
-                    shutil.copy2(fallback_img, os.path.join(output_dir, f"frame_{k:04d}.jpg"))
-            else:
-                raise RuntimeError(f"FFmpeg frame extraction failed: {e}")
+            raise RuntimeError(f"FFmpeg video frame extraction failed: {str(e)}")
 
         extracted = sorted([f for f in os.listdir(output_dir) if f.startswith("frame_") and f.endswith(".jpg")])
         if not extracted:

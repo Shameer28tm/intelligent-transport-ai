@@ -43,13 +43,14 @@ def create_app_engine(database_url: str):
     if is_sqlite:
         return create_engine(
             norm_url,
-            connect_args={"check_same_thread": False},
+            connect_args={"check_same_thread": False, "timeout": 10},
             echo=False,
             future=True,
         )
     elif is_postgres:
         return create_engine(
             norm_url,
+            connect_args={"connect_timeout": 5},
             pool_pre_ping=True,      # Vital for Neon serverless idle connection recovery
             pool_recycle=300,        # Recycle idle connections every 5 minutes
             pool_size=5,

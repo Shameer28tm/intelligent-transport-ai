@@ -97,6 +97,15 @@ export const IncidentFeed: React.FC<IncidentFeedProps> = ({
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                       {incident.category.replace('_', ' ')}
                     </span>
+                    <span
+                      className={`rounded px-1 py-0.5 text-[9px] font-mono ${
+                        incident.is_simulated
+                          ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40'
+                          : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40'
+                      }`}
+                    >
+                      {incident.is_simulated ? 'SIM' : 'REAL'}
+                    </span>
                   </div>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                     {new Date(incident.created_at).toLocaleTimeString([], {

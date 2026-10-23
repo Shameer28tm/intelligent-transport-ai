@@ -83,17 +83,20 @@ export const TrafficManagementPage: React.FC<TrafficManagementPageProps> = ({ in
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold text-white tracking-wide font-mono uppercase">
+          <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-wide font-mono uppercase">
             Traffic Management & Arterial Corridors
           </h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-600 dark:text-slate-400">
             Arterial speeds, Level of Service (LOS), adaptive signal synchronization, and CCTV traffic intelligence
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="rounded-lg border border-emerald-500/40 bg-emerald-950/40 px-3 py-1 text-xs text-emerald-300 font-mono">
-            Adaptive Signal Control: ACTIVE
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-lg border border-amber-300 dark:border-amber-600/40 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 text-[11px] text-amber-800 dark:text-amber-300 font-mono">
+            CORRIDOR FEEDS: SIMULATED BENCHMARKS
+          </span>
+          <span className="rounded-lg border border-sky-300 dark:border-sky-500/40 bg-sky-50 dark:bg-sky-950/40 px-2.5 py-1 text-[11px] text-sky-800 dark:text-sky-300 font-mono">
+            LOOP SENSORS: NOT CONFIGURED
           </span>
         </div>
       </div>

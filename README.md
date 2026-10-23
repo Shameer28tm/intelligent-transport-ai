@@ -36,7 +36,7 @@ intelligent-transport-ai/
 │   │   ├── seed.py                    # Seeder for realistic urban transport incidents
 │   │   └── main.py                    # FastAPI application entrypoint with CORS & lifespan
 │   ├── alembic/                       # Alembic migrations (PostgreSQL production schema)
-│   ├── tests/                         # Pytest test suite (40 automated tests)
+│   ├── tests/                         # Pytest test suite (67 automated tests)
 │   ├── requirements.txt               # Backend dependencies
 │   ├── pytest.ini                     # Pytest configuration
 │   └── .env.example                   # Backend environment variables template
@@ -95,15 +95,15 @@ python -m venv backend\.venv
 # Install backend dependencies
 .\backend\.venv\Scripts\pip.exe install -r backend\requirements.txt
 
-# (Optional) Download genuine pretrained YOLOv8n ONNX model weights (~12.85 MB)
-.\backend\.venv\Scripts\python.exe backend/app/services/vision/download_weights.py
+# (Optional) Verify or download genuine pretrained YOLOv8n ONNX weights & demo assets (~12.85 MB, Ultralytics AGPL-3.0)
+.\backend\.venv\Scripts\python.exe backend/app/services/vision/setup_assets.py
 
-# Run database migrations (applies schema up to head on configured database)
+# Run database migrations (applies schema up to head on configured database; defaults to local SQLite)
 cd backend
 .\.venv\Scripts\alembic.exe upgrade head
 cd ..
 
-# Run backend automated test suite (40 tests)
+# Run backend automated test suite (67 tests)
 cd backend
 .\.venv\Scripts\pytest.exe tests -v
 cd ..
@@ -154,16 +154,16 @@ Execute all automated tests via pytest:
 cd backend
 .\.venv\Scripts\pytest.exe tests -v
 ```
-**Test Results: 64 Passed, 0 Failed, 0 Skipped (100% Pass Rate)**
+**Test Results: 67 Passed, 0 Failed, 0 Skipped (100% Pass Rate)**
 - `test_root_endpoint`: Verifies API root metadata and provenance flag.
-- `test_health_endpoint`: Verifies database latency, health status, and hardware detection.
+- `test_health_endpoint`: Verifies database latency, health status, bounded timeout handling (`test_health_degraded_when_database_unreachable`), and dynamic hardware detection.
 - `test_database_migration`: Tests URL normalization, dialect isolation, and Alembic migrations.
 - `test_postgres_connectivity`: Validates real PostgreSQL connectivity, `SELECT 1`, and isolated CRUD lifecycle.
 - `test_session_persistence_idempotency`: Validates repeat requests idempotency, multi-thread concurrency safety, and history deduplication.
 - `test_incidents`: Tests incident listing, severity/category filtering, spatial bounding box queries, detail retrieval, and status updates.
 - `test_statistics`: Validates KPI aggregations and hourly trend histograms.
 - `test_mappls`: Verifies status, geocode, and routing endpoints with OAuth error handling.
-- `test_vision`: Tests format validation, demo simulator, and real neural vision inference.
+- `test_vision`: Tests format validation, demo simulator, genuine neural vision inference, and regression tests (`test_video_analysis_fails_gracefully_when_ffmpeg_missing`, `test_video_analysis_fails_gracefully_when_ffprobe_missing`) ensuring 503 errors and zero fabricated records on missing decoders.
 - `test_vision_p3`: Tests IoU box calculation, multi-object IoU tracker association, cordon crossing events, ground truth evaluation, and live frame streaming.
 - `test_risk_estimator`: Validates constant-velocity trajectory projections, conflict reason codes, boundary approach handling, backward seek interruption, tracker integration, and end-to-end premonition payload delivery.
 

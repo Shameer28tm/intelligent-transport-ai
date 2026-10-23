@@ -91,13 +91,21 @@ def get_supported_formats():
     """Return supported media formats, video limits, and neural runtime configuration."""
     service = get_vision_service()
     real_adapter = RealVisionAdapter()
+    ort_providers = []
+    try:
+        import onnxruntime as ort
+        ort_providers = ort.get_available_providers()
+    except Exception:
+        pass
+    hw_provider = "CUDAExecutionProvider" if "CUDAExecutionProvider" in ort_providers else "CPUExecutionProvider"
+
     return VisionSupportedFormatsResponse(
         supported_images=sorted(list(SUPPORTED_IMAGE_EXTS)),
         supported_videos=sorted(list(SUPPORTED_VIDEO_EXTS)),
         max_file_size_mb=int(settings.MAX_UPLOAD_SIZE_BYTES / (1024 * 1024)),
         max_video_duration_seconds=settings.MAX_VIDEO_DURATION_SECONDS,
         active_adapter=service.adapter_name,
-        hardware_acceleration="ONNX Runtime CPUExecutionProvider (RTX 5060 Ready)",
+        hardware_acceleration=f"ONNX Runtime {hw_provider}",
         model_weights_available=real_adapter.is_available(),
         model_name="YOLOv8n ONNX Object Detection (MS COCO Pretrained)",
     )
@@ -108,6 +116,14 @@ def get_vision_subsystem_status():
     """Returns active vision adapter status, availability, and simulated demo flags."""
     service = get_vision_service()
     real_adapter = RealVisionAdapter()
+    ort_providers = []
+    try:
+        import onnxruntime as ort
+        ort_providers = ort.get_available_providers()
+    except Exception:
+        pass
+    hw_provider = "CUDAExecutionProvider" if "CUDAExecutionProvider" in ort_providers else "CPUExecutionProvider"
+
     return {
         "adapter_name": service.adapter_name,
         "is_simulated": service.is_simulated,
@@ -117,7 +133,7 @@ def get_vision_subsystem_status():
             "name": "YOLOv8n ONNX",
             "weights_path": real_adapter.weights_path,
             "is_available": real_adapter.is_available(),
-            "execution_provider": "CPUExecutionProvider",
+            "execution_provider": hw_provider,
             "supported_classes": ["car", "bus", "truck", "motorcycle", "bicycle", "pedestrian", "traffic_light", "stop_sign"],
         },
         "simulator": {
@@ -199,7 +215,10 @@ async def analyze_road_media(
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except RuntimeError as re:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(re))
+        msg = str(re)
+        if any(w in msg.lower() for w in ("corrupt", "unsupported", "zero frames", "invalid video")):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=msg)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=msg)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Vision processing failed: {str(exc)}")
 
@@ -322,7 +341,10 @@ async def analyze_moving_video(
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except RuntimeError as re:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(re))
+        msg = str(re)
+        if any(w in msg.lower() for w in ("corrupt", "unsupported", "zero frames", "invalid video")):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=msg)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=msg)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Video intelligence processing failed: {str(exc)}")
 

@@ -51,9 +51,18 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
       {/* Header with Title and Close */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
             <StatusBadge severity={incident.severity} />
             <StatusBadge status={incident.status} />
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-mono ${
+                incident.is_simulated
+                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+              }`}
+            >
+              {incident.is_simulated ? 'SIMULATED DEMO INCIDENT' : 'VERIFIED DISPATCH REPORT'}
+            </span>
           </div>
           <h4 className="text-sm font-semibold text-white leading-snug">{incident.title}</h4>
         </div>

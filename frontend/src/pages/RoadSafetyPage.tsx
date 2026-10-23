@@ -75,16 +75,19 @@ export const RoadSafetyPage: React.FC<RoadSafetyPageProps> = ({
               <ShieldAlert className="h-5 w-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide font-mono uppercase">
                   Vision Zero & Municipal Road Safety Analytics
                 </h2>
                 <span className="rounded bg-red-50 dark:bg-red-950/80 px-2 py-0.5 text-[10px] font-mono text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
                   CRITICAL CORRIDORS
                 </span>
+                <span className="rounded bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-[10px] font-mono text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40">
+                  BLACKSPOTS: BENCHMARK DEMO DATA
+                </span>
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-2xl leading-relaxed">
-                Automated detection of collision risks, pedestrian conflicts, high-hazard corridors, and predictive interventions based on real-time sensor and vision feeds.
+                Active priority hazards reflect live database incidents. Blackspot risk rankings and recommended geometric interventions represent municipal historical planning benchmarks.
               </p>
             </div>
           </div>
@@ -114,18 +117,18 @@ export const RoadSafetyPage: React.FC<RoadSafetyPageProps> = ({
 
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] p-4 shadow-xs">
           <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider font-mono">
-            Vision Zero Target Progress
+            Vision Zero Target Status
           </span>
-          <p className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">-18.4%</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">YoY reduction in pedestrian conflicts</p>
+          <p className="text-xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1">Pending Feed</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Requires police crash records (FIR / Form-54)</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] p-4 shadow-xs">
           <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider font-mono">
-            Automated Conflict Interventions
+            Adaptive Signal Interventions
           </span>
-          <p className="text-2xl font-bold font-mono text-sky-600 dark:text-sky-400 mt-1">12 Signals</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Dynamic pedestrian intervals active</p>
+          <p className="text-xl font-bold font-mono text-slate-500 dark:text-slate-400 mt-1">Unconnected</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Requires SCATS / SCOOT / NTCIP controller feed</p>
         </div>
       </div>
 
@@ -133,15 +136,20 @@ export const RoadSafetyPage: React.FC<RoadSafetyPageProps> = ({
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] p-4 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-xs font-bold text-slate-900 dark:text-white font-mono uppercase tracking-wider">
-              High-Hazard Roadway Blackspot Register
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white font-mono uppercase tracking-wider">
+                High-Hazard Roadway Blackspot Register
+              </h3>
+              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                ILLUSTRATIVE SAMPLE
+              </span>
+            </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Ranked by cumulative conflict risk, historical incidents, and traffic volume
+              Corridor benchmarks pending city collision GIS database integration
             </p>
           </div>
           <span className="text-[10px] font-mono text-slate-600 dark:text-slate-400 rounded bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.5">
-            Audit Period: 30 Days
+            Sample Register
           </span>
         </div>
 

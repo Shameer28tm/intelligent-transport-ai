@@ -170,9 +170,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     : 'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                 }`}
               >
-                {mapplsStatus?.status === 'AUTH_FAILED'
-                  ? 'HTTP 401 (Bad Credentials)'
-                  : mapplsStatus?.status || 'Auditing...'}
+                {isLoadingMappls
+                  ? 'Checking'
+                  : mapplsStatus?.is_operational
+                  ? 'Authenticated'
+                  : mapplsStatus?.status === 'AUTH_FAILED'
+                  ? 'Invalid credentials (HTTP 401)'
+                  : mapplsStatus?.status === 'NOT_CONFIGURED'
+                  ? 'Not configured'
+                  : mapplsStatus?.status === 'SERVICE_UNAVAILABLE'
+                  ? 'Network error'
+                  : 'Not configured'}
               </span>
             </div>
             <div className="flex justify-between items-center">

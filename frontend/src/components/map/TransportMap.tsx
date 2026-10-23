@@ -1,5 +1,12 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import * as maplibregl from 'maplibre-gl';
+import maplibreglWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+
+// Configure MapLibre GL worker URL for Vite bundling
+if (typeof window !== 'undefined' && (maplibregl as any).config) {
+  (maplibregl as any).config.WORKER_URL = maplibreglWorkerUrl;
+}
+
 import {
   RotateCcw,
   Layers,
@@ -15,6 +22,9 @@ import {
   X,
   ExternalLink,
   ShieldAlert,
+  ShieldCheck,
+  RefreshCw,
+  Lock,
 } from 'lucide-react';
 import { Incident, IncidentSeverity, MapplsStatus } from '../../types';
 import { MapLegend } from './MapLegend';
@@ -228,6 +238,7 @@ export const TransportMap: React.FC<TransportMapProps> = ({
   const [mapplsStatus, setMapplsStatus] = useState<MapplsStatus | null>(null);
   const [isCheckingMappls, setIsCheckingMappls] = useState(false);
   const [mapplsBannerNotice, setMapplsBannerNotice] = useState<string | null>(null);
+  const [isMapplsDiagOpen, setIsMapplsDiagOpen] = useState(false);
 
   // Mappls Place Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -238,19 +249,19 @@ export const TransportMap: React.FC<TransportMapProps> = ({
 
   const cartoApiKey = import.meta.env.VITE_CARTO_API_KEY as string | undefined;
 
-  // Audit Mappls status on mount
-  useEffect(() => {
+  const refreshMapplsStatus = useCallback(() => {
     setIsCheckingMappls(true);
     api.getMapplsStatus()
       .then((status) => {
         setMapplsStatus(status);
         if (!status.is_operational) {
-          // If Mappls is selected or attempted, notice user of fallback
           if (status.status === 'AUTH_FAILED') {
             setMapplsBannerNotice(
               `Mappls Service Notice: Server credentials rejected with HTTP 401 (Bad client credentials). Fallback basemap (Esri Canvas) is active.`
             );
           }
+        } else {
+          setMapplsBannerNotice(null);
         }
       })
       .catch((err) => {
@@ -260,6 +271,11 @@ export const TransportMap: React.FC<TransportMapProps> = ({
         setIsCheckingMappls(false);
       });
   }, []);
+
+  // Audit Mappls status on mount
+  useEffect(() => {
+    refreshMapplsStatus();
+  }, [refreshMapplsStatus]);
 
   // Filter incidents according to active severity filter
   const filteredIncidents = useMemo(() => {
@@ -555,7 +571,15 @@ export const TransportMap: React.FC<TransportMapProps> = ({
     {
       id: 'mappls',
       label: 'Mappls Enterprise Map',
-      badge: mapplsStatus?.is_operational ? 'Connected' : 'Auth Required (401)',
+      badge: isCheckingMappls
+        ? 'Checking...'
+        : mapplsStatus?.is_operational
+        ? 'Authenticated · India Vector'
+        : mapplsStatus?.status === 'AUTH_FAILED'
+        ? 'Invalid Credentials · Esri Fallback'
+        : mapplsStatus?.status === 'NOT_CONFIGURED'
+        ? 'Not Configured · Esri Fallback'
+        : 'Esri Fallback Active',
       isKeyless: false,
     },
     {
@@ -691,6 +715,34 @@ export const TransportMap: React.FC<TransportMapProps> = ({
           >
             <RotateCcw className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Reset</span>
+          </button>
+
+          {/* Mappls Provider Diagnostics Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsMapplsDiagOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0b1120]/95 backdrop-blur-md px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors shadow-xs"
+            title="View Mappls Authentication Diagnostics"
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                mapplsStatus?.is_operational
+                  ? 'bg-emerald-500'
+                  : mapplsStatus?.status === 'AUTH_FAILED'
+                  ? 'bg-amber-500'
+                  : 'bg-slate-400'
+              }`}
+            />
+            <span className="font-mono text-[11px] hidden sm:inline">
+              {isCheckingMappls
+                ? 'Mappls: Checking'
+                : mapplsStatus?.is_operational
+                ? 'Mappls: OK'
+                : mapplsStatus?.status === 'AUTH_FAILED'
+                ? 'Mappls: 401 (Fallback)'
+                : 'Mappls: Standby'}
+            </span>
+            <Info className="h-3 w-3 text-slate-400" />
           </button>
         </div>
 
@@ -851,6 +903,102 @@ export const TransportMap: React.FC<TransportMapProps> = ({
         onClose={() => onSelectIncident(null)}
         onUpdateStatus={onUpdateStatus}
       />
+
+      {/* Mappls Geospatial Provider Diagnostics Modal */}
+      {isMapplsDiagOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0c1322] p-5 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <MapIcon className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white font-mono uppercase">
+                  Mappls Geospatial Provider Diagnostics
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMapplsDiagOpen(false)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-800/80">
+                <span className="text-slate-500 dark:text-slate-400">OAuth Authentication Status:</span>
+                <span
+                  className={`font-mono font-semibold px-2 py-0.5 rounded text-[11px] ${
+                    mapplsStatus?.is_operational
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                      : mapplsStatus?.status === 'AUTH_FAILED'
+                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                      : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                  }`}
+                >
+                  {isCheckingMappls
+                    ? 'Checking'
+                    : mapplsStatus?.status === 'AUTH_FAILED'
+                    ? 'Invalid credentials (HTTP 401)'
+                    : mapplsStatus?.status || 'Not configured'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-800/80">
+                <span className="text-slate-500 dark:text-slate-400">Active Map Rendering Layer:</span>
+                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                  {mapplsStatus?.is_operational ? 'Mappls Vector Map' : 'Esri World Gray Canvas (Keyless Public)'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-800/80">
+                <span className="text-slate-500 dark:text-slate-400">Client ID Status:</span>
+                <span className="font-mono text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <Lock className="h-3 w-3 text-slate-400" />
+                  {mapplsStatus?.masked_client_id || 'Configured (masked)'}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed space-y-1">
+                <p className="font-semibold">Diagnostic Summary:</p>
+                <p>
+                  {mapplsStatus?.diagnostic_message ||
+                    'Mappls authentication endpoint returned HTTP 401 (Bad client credentials). The system automatically falls back to Esri Canvas.'}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed space-y-1">
+                <p className="font-semibold text-slate-800 dark:text-slate-200">How to Obtain Valid Credentials:</p>
+                <p>
+                  1. Register an account at <a href="https://www.mappls.com/api/" target="_blank" rel="noreferrer" className="text-sky-600 dark:text-sky-400 underline">mappls.com/api</a>
+                </p>
+                <p>2. Create a project and obtain an authorized OAuth 2.0 Client ID and Client Secret.</p>
+                <p>3. Add <code className="font-mono text-slate-700 dark:text-slate-300">MAPPLS_CLIENT_ID</code> and <code className="font-mono text-slate-700 dark:text-slate-300">MAPPLS_CLIENT_SECRET</code> to your <code className="font-mono">.env.local</code>.</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={refreshMapplsStatus}
+                disabled={isCheckingMappls}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <RefreshCw className={`h-3 w-3 ${isCheckingMappls ? 'animate-spin' : ''}`} />
+                <span>Re-check Mappls Auth</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsMapplsDiagOpen(false)}
+                className="rounded-lg bg-slate-900 dark:bg-slate-800 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 dark:hover:bg-slate-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

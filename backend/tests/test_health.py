@@ -1,3 +1,7 @@
+from unittest.mock import MagicMock
+from sqlalchemy.exc import OperationalError
+
+
 def test_root_endpoint(client):
     response = client.get("/")
     assert response.status_code == 200
@@ -14,4 +18,29 @@ def test_health_endpoint(client):
     assert data["database"]["status"] == "connected"
     assert "Deterministic Demo Simulator" in data["vision_subsystem"]["active_adapter"]
     assert data["vision_subsystem"]["is_simulated"] is True
-    assert "RTX 5060" in data["hardware_detection"]["gpu_detected"]
+    # Hardware detection must be dynamic and not hardcode fake CUDA availability
+    assert isinstance(data["hardware_detection"]["gpu_detected"], str)
+    assert isinstance(data["hardware_detection"]["cuda_driver_ready"], bool)
+    assert "inference_runtime" in data["hardware_detection"]
+
+
+def test_health_degraded_when_database_unreachable(client, monkeypatch):
+    """Verify /health returns status: degraded within <10s without crashing when DB fails."""
+    from app.database import get_db
+
+    def mock_get_db():
+        mock_session = MagicMock()
+        mock_session.execute.side_effect = OperationalError("connection timeout", params=None, orig=None)
+        yield mock_session
+
+    from app.main import app
+    app.dependency_overrides[get_db] = mock_get_db
+    try:
+        response = client.get("/api/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "degraded"
+        assert "unreachable" in data["database"]["status"]
+        assert data["database"]["latency_ms"] >= 0.0 or data["database"]["latency_ms"] == -1.0
+    finally:
+        app.dependency_overrides.pop(get_db, None)
