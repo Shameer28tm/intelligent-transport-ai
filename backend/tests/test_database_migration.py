@@ -23,13 +23,13 @@ def test_database_url_normalization():
     assert "transport.db" in norm_sqlite
 
     # Legacy postgres:// -> postgresql+psycopg2://
-    pg_legacy = "postgres://user:pass@ep-cool-db-123.us-east-2.aws.neon.tech/neondb?sslmode=require"
+    pg_legacy = "postgres://mock_user:mock_pass@mock-db-instance.internal/mockdb?sslmode=require"
     norm_pg = get_normalized_database_url(pg_legacy)
     assert norm_pg.startswith("postgresql+psycopg2://")
-    assert "ep-cool-db-123.us-east-2.aws.neon.tech" in norm_pg
+    assert "mock-db-instance.internal" in norm_pg
 
     # postgresql:// -> postgresql+psycopg2://
-    pg_std = "postgresql://user:pass@ep-cool-db-123.us-east-2.aws.neon.tech/neondb?sslmode=require"
+    pg_std = "postgresql://mock_user:mock_pass@mock-db-instance.internal/mockdb?sslmode=require"
     norm_pg_std = get_normalized_database_url(pg_std)
     assert norm_pg_std.startswith("postgresql+psycopg2://")
 

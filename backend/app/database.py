@@ -97,7 +97,7 @@ def get_db_info(raw_url: str | None = None) -> Dict[str, Any]:
         "dialect": "postgresql",
         "is_postgres": True,
         "is_neon": is_neon,
-        "engine": f"Neon PostgreSQL ({parsed.hostname})" if is_neon else "PostgreSQL Server",
+        "engine": "Neon PostgreSQL (Serverless)" if is_neon else "PostgreSQL Server",
     }
 
 

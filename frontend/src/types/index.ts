@@ -139,6 +139,7 @@ export interface TrackingSummary {
   tracking_algorithm: string;
   limitations_notice: string;
   risk_events?: PremonitionEvent[];
+  rider_safety_events?: RiderSafetyEvent[];
 }
 
 // ==========================================
@@ -303,6 +304,7 @@ export interface VisionAnalysisResult {
   fps_processed?: number;
   inference_config?: Record<string, any>;
   premonition?: PremonitionResult | null;
+  rider_safety?: RiderSafetyResult | null;
   recommendations: string[];
   timestamp: string;
   data_source?: string;
@@ -531,5 +533,156 @@ export type AppModule =
   | 'planning'
   | 'sustainability'
   | 'accessibility'
+  | 'emergency'
   | 'settings';
+
+// ==========================================
+// Tamil Nadu Road Safety (computed from stored incidents; reference data carries provenance)
+// ==========================================
+export interface SafetyDistrictRow {
+  district: string;
+  total: number;
+  crashes: number;
+  serious: number;
+}
+
+export interface SafetySummary {
+  total_incidents: number;
+  simulated_incidents: number;
+  by_district: SafetyDistrictRow[];
+  by_severity: Record<string, number>;
+  by_category: Record<string, number>;
+  by_hour_ist: number[];
+  tagged_two_wheeler: number;
+  tagged_no_helmet: number;
+  pedestrian_related: number;
+  generated_at: string;
+  district_note: string;
+}
+
+export interface SafetyHotspot {
+  rank: number;
+  latitude: number;
+  longitude: number;
+  radius_m: number;
+  district: string | null;
+  incident_count: number;
+  serious_count: number;
+  severity_score: number;
+  meets_black_corridor_rule: boolean;
+  location_names: string[];
+  top_tags: string[];
+  incident_ids: string[];
+  is_simulated: boolean;
+}
+
+export interface SafetyHotspotsResponse {
+  radius_m: number;
+  min_incidents: number;
+  days: number | null;
+  count: number;
+  hotspots: SafetyHotspot[];
+  method: string;
+  district_note: string;
+}
+
+export interface TraumaFacility {
+  name: string;
+  city: string;
+  district: string;
+  lat: number;
+  lng: number;
+  straight_line_km: number;
+}
+
+export interface FacilitiesResponse {
+  origin: { lat: number; lng: number };
+  facilities: TraumaFacility[];
+  distance_type: 'straight_line';
+  note: string;
+  helplines: { number: string; label: string }[];
+}
+
+export interface TnContext {
+  statewide_2024: {
+    road_accidents: number;
+    road_deaths: number;
+    deaths_without_helmet: number;
+    national_rank_accidents: number;
+    national_rank_deaths: number;
+    source: string;
+    source_url: string;
+  };
+  black_corridors: {
+    definition: string;
+    top_tn_locations: { location: string; corridors: number; national_rank?: number }[];
+    source: string;
+    source_url: string;
+  };
+  golden_hour_scheme: { name: string; summary: string; launched: string; source: string; source_url: string };
+  helplines: { number: string; label: string }[];
+}
+
+// Rider Safety (rule-based candidates from live tracked frames; always needs human review)
+export interface RiderSafetyEvent {
+  event_id: string;
+  kind: 'TRIPLE_RIDING' | 'WRONG_SIDE';
+  track_id: number;
+  class_name: string | null;
+  first_detected_sec: number;
+  last_detected_sec: number;
+  status: 'NEEDS_REVIEW';
+  is_observation_candidate: true;
+  update_count: number;
+  evidence: Record<string, any>;
+  reasons: string[];
+  status_note?: string;
+}
+
+export interface RiderSafetyResult {
+  engine: string;
+  timestamp_sec: number | null;
+  note: string | null;
+  motorcycles_in_frame: number;
+  riders_matched: number;
+  triple_riding_now: { track_id: number; rider_count: number }[];
+  wrong_side_now: { track_id: number; direction_cosine: number }[];
+  wrong_side_enabled: boolean;
+  permitted_direction: string | null;
+  helmet_detection: 'NOT_AVAILABLE';
+  events: RiderSafetyEvent[];
+  active_event_ids: string[];
+  limitations: string[];
+}
+
+// ==========================================
+// Multilingual Voice Assistant Types
+// ==========================================
+export interface VoiceAction {
+  type: 'navigate_to_page' | 'focus_map_location' | 'select_incident' | 'apply_supported_filter' | string;
+  action_type?: string;
+  payload: Record<string, any>;
+}
+
+export interface VoiceAssistantResponse {
+  transcript: string;
+  response_text: string;
+  detected_language: string;
+  audio_base64: string | null;
+  audio_mime_type: string | null;
+  action: VoiceAction | null;
+  tool_invoked: string | null;
+  data_grounded: boolean;
+}
+
+export interface VoiceStatusResponse {
+  sarvam_configured: boolean;
+  gemini_configured: boolean;
+  stt_model: string;
+  tts_model: string;
+  tts_speaker: string;
+  gemini_model: string;
+  supported_languages: string[];
+  supported_actions: string[];
+}
 

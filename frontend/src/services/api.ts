@@ -198,6 +198,7 @@ export const api = {
       cordon_y?: number;
       confidence_threshold?: number;
       source_aspect_ratio?: number;
+      permitted_direction?: 'up' | 'down' | 'left' | 'right';
     }
   ): Promise<VisionAnalysisResult> {
     const formData = new FormData();
@@ -219,6 +220,9 @@ export const api = {
     }
     if (options?.source_aspect_ratio && Number.isFinite(options.source_aspect_ratio)) {
       formData.append('source_aspect_ratio', options.source_aspect_ratio.toString());
+    }
+    if (options?.permitted_direction) {
+      formData.append('permitted_direction', options.permitted_direction);
     }
 
     const params = new URLSearchParams();
@@ -430,6 +434,79 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || err.error || 'TomTom incidents request failed');
+    }
+    return res.json();
+  },
+
+  // ==========================================
+  // Tamil Nadu Road Safety
+  // ==========================================
+  async getSafetyContext(): Promise<import('../types').TnContext> {
+    const res = await fetch(`${API_BASE}/safety/context`);
+    if (!res.ok) throw new Error(`Safety context unavailable (HTTP ${res.status})`);
+    return res.json();
+  },
+
+  async getSafetySummary(): Promise<import('../types').SafetySummary> {
+    const res = await fetch(`${API_BASE}/safety/summary`);
+    if (!res.ok) throw new Error(`Safety summary unavailable (HTTP ${res.status})`);
+    return res.json();
+  },
+
+  async getSafetyHotspots(radiusM = 500, minIncidents = 2, days = 1095): Promise<import('../types').SafetyHotspotsResponse> {
+    const params = new URLSearchParams({ radius_m: String(radiusM), min_incidents: String(minIncidents), days: String(days) });
+    const res = await fetch(`${API_BASE}/safety/hotspots?${params.toString()}`);
+    if (!res.ok) throw new Error(`Hotspots unavailable (HTTP ${res.status})`);
+    return res.json();
+  },
+
+  async getNearestFacilities(lat: number, lng: number, limit = 5): Promise<import('../types').FacilitiesResponse> {
+    const params = new URLSearchParams({ lat: String(lat), lng: String(lng), limit: String(limit) });
+    const res = await fetch(`${API_BASE}/safety/facilities?${params.toString()}`);
+    if (!res.ok) throw new Error(`Facility lookup failed (HTTP ${res.status})`);
+    return res.json();
+  },
+
+  // ==========================================
+  // Multilingual Voice Assistant
+  // ==========================================
+  async getVoiceStatus(): Promise<import('../types').VoiceStatusResponse> {
+    const res = await fetch(`${API_BASE}/voice/status`);
+    if (!res.ok) throw new Error(`Voice status unavailable (HTTP ${res.status})`);
+    return res.json();
+  },
+
+  async processVoiceAssistant(options: {
+    audio?: Blob;
+    text?: string;
+    language?: string;
+  }): Promise<import('../types').VoiceAssistantResponse> {
+    const formData = new FormData();
+    if (options.audio) {
+      const blobType = (options.audio.type || '').toLowerCase();
+      let filename = 'microphone.webm';
+      if (blobType.includes('wav')) filename = 'microphone.wav';
+      else if (blobType.includes('ogg')) filename = 'microphone.ogg';
+      else if (blobType.includes('mp4')) filename = 'microphone.mp4';
+      else if (blobType.includes('mp3') || blobType.includes('mpeg')) filename = 'microphone.mp3';
+
+      formData.append('audio', options.audio, filename);
+    }
+    if (options.text) {
+      formData.append('text', options.text);
+    }
+    if (options.language) {
+      formData.append('language', options.language);
+    }
+
+    const res = await fetch(`${API_BASE}/voice/assistant`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || `Voice assistant request failed (${res.status})`);
     }
     return res.json();
   },

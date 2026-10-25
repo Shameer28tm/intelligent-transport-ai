@@ -2,9 +2,12 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, "feat/**" ]
   pull_request:
     branches: [ main ]
+
+permissions:
+  contents: read
 
 jobs:
   backend-test:
@@ -46,6 +49,10 @@ jobs:
       - name: Install dependencies
         working-directory: ./frontend
         run: npm ci
+
+      - name: Dependency security audit
+        working-directory: ./frontend
+        run: npm audit --audit-level=high
 
       - name: TypeScript check
         working-directory: ./frontend

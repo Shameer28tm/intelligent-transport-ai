@@ -16,6 +16,8 @@ from app.api import (
     vision_router,
     mappls_router,
     tomtom_router,
+    safety_router,
+    voice_router,
 )
 
 settings = get_settings()
@@ -91,6 +93,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
 # Custom validation error handler for consistent JSON responses
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -132,6 +145,8 @@ app.include_router(statistics_router, prefix=settings.API_V1_PREFIX)
 app.include_router(vision_router, prefix=settings.API_V1_PREFIX)
 app.include_router(mappls_router, prefix=settings.API_V1_PREFIX)
 app.include_router(tomtom_router, prefix=settings.API_V1_PREFIX)
+app.include_router(safety_router, prefix=settings.API_V1_PREFIX)
+app.include_router(voice_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/")

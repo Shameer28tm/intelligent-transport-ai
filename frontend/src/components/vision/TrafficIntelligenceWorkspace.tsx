@@ -44,9 +44,11 @@ import {
   TimeBucketSummary,
   TrafficEvent,
   PremonitionResult,
+  RiderSafetyResult,
 } from '../../types';
 import { api } from '../../services/api';
 import { TrafficPremonitionPanel, PREMONITION_COLORS } from './TrafficPremonitionPanel';
+import { RiderSafetyPanel, PermittedDirection } from './RiderSafetyPanel';
 
 export type TrafficIntelligenceSubsection =
   | 'live_detection'
@@ -90,6 +92,10 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
   // Traffic Premonition (trajectory risk estimate computed server-side from tracker output)
   const [livePremonition, setLivePremonition] = useState<PremonitionResult | null>(null);
   const [premonitionOverlayEnabled, setPremonitionOverlayEnabled] = useState<boolean>(true);
+
+  // Rider Safety (triple riding / wrong side candidates from the same tracked frames)
+  const [liveRiderSafety, setLiveRiderSafety] = useState<RiderSafetyResult | null>(null);
+  const [permittedDirection, setPermittedDirection] = useState<PermittedDirection>('none');
 
   // Selected-frame offline capture state
   const [capturedFrameBlob, setCapturedFrameBlob] = useState<Blob | null>(null);
@@ -416,6 +422,7 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
     const newSid = `live_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     setLiveSessionId(newSid);
     setLivePremonition(null);
+    setLiveRiderSafety(null);
     setLiveProcessedFrames(0);
     setLiveSkippedFrames(0);
     setLiveLatencyMs(null);
@@ -537,6 +544,7 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
                   confidence_threshold: confidenceThreshold,
                   source_aspect_ratio:
                     video.videoWidth > 0 && video.videoHeight > 0 ? video.videoWidth / video.videoHeight : undefined,
+                  permitted_direction: permittedDirection === 'none' ? undefined : permittedDirection,
                 }
               );
 
@@ -559,6 +567,7 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
 
               const dets = result.detected_objects || [];
               setLivePremonition(result.premonition ?? null);
+              setLiveRiderSafety(result.rider_safety ?? null);
               setLiveDetections(dets);
               if (dets.length > 0) {
                 setInspectedObject(dets[0]);
@@ -602,6 +611,7 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
     enableTracking,
     cordonY,
     confidenceThreshold,
+    permittedDirection,
   ]);
 
   // ==========================================
@@ -1504,6 +1514,15 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
                 isLiveActive={isLiveDetectionActive}
                 onInspectMoment={handleInspectPremonitionMoment}
               />
+
+              {/* Rider Safety: triple riding and wrong-side candidates for review */}
+              <RiderSafetyPanel
+                result={liveRiderSafety}
+                isLiveActive={isLiveDetectionActive}
+                permittedDirection={permittedDirection}
+                onChangeDirection={setPermittedDirection}
+                onInspectMoment={handleInspectPremonitionMoment}
+              />
             </div>
           )}
         </div>
@@ -2069,6 +2088,31 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
                       closest projected gap {ev.peak.measurements.closest_projected_separation_fh.toFixed(3)} fh
                       {ev.peak.measurements.time_to_closest_approach_sec !== null &&
                         ` · ${ev.peak.measurements.time_to_closest_approach_sec.toFixed(2)} s ahead`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Saved Rider Safety candidates (from live sessions). Need review; never auto-filed as incidents. */}
+          {fullAnalysisResult?.tracking_summary?.rider_safety_events && fullAnalysisResult.tracking_summary.rider_safety_events.length > 0 && (
+            <div className="p-3.5 rounded-xl bg-white dark:bg-[#0b1120] border border-slate-200 dark:border-slate-800 space-y-2.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <h5 className="text-xs font-semibold text-slate-900 dark:text-white">Rider safety candidates</h5>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400">Needs review, not offence records</span>
+              </div>
+              <ul className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                {fullAnalysisResult.tracking_summary.rider_safety_events.map((ev) => (
+                  <li
+                    key={ev.event_id}
+                    className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs"
+                  >
+                    <span className="font-semibold text-slate-900 dark:text-white">
+                      {ev.kind === 'TRIPLE_RIDING' ? 'Triple riding' : 'Wrong-side driving'} · #{ev.track_id}
+                    </span>
+                    <span className="font-mono text-[11px] text-slate-600 dark:text-slate-300">
+                      {ev.first_detected_sec.toFixed(2)}–{ev.last_detected_sec.toFixed(2)} s
                     </span>
                   </li>
                 ))}

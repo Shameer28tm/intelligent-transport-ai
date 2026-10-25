@@ -49,16 +49,19 @@ export interface RegionPreset {
   center: [number, number];
   zoom: number;
   bbox: [number, number, number, number];
+  /** TomTom incident queries are limited to small areas; statewide views skip live data. */
+  liveTrafficSupported?: boolean;
 }
 
 export const REGION_PRESETS: RegionPreset[] = [
   {
-    id: 'sf',
-    label: 'San Francisco, CA',
-    shortLabel: 'SF Metro',
-    center: [-122.4194, 37.7749],
-    zoom: 12.2,
-    bbox: [-122.52, 37.70, -122.35, 37.82],
+    id: 'tn',
+    label: 'Tamil Nadu (statewide)',
+    shortLabel: 'Tamil Nadu',
+    center: [78.6569, 11.1271],
+    zoom: 6.4,
+    bbox: [76.2, 8.0, 80.4, 13.6],
+    liveTrafficSupported: false,
   },
   {
     id: 'chennai',
@@ -75,6 +78,30 @@ export const REGION_PRESETS: RegionPreset[] = [
     center: [76.9558, 11.0168],
     zoom: 12.5,
     bbox: [76.85, 10.92, 77.08, 11.08],
+  },
+  {
+    id: 'vikravandi',
+    label: 'NH-45 Vikravandi, Viluppuram',
+    shortLabel: 'NH-45 Vikravandi',
+    center: [79.5466, 12.0379],
+    zoom: 13.5,
+    bbox: [79.45, 11.95, 79.65, 12.12],
+  },
+  {
+    id: 'madurai',
+    label: 'Madurai, Tamil Nadu',
+    shortLabel: 'Madurai TN',
+    center: [78.1198, 9.9252],
+    zoom: 12.5,
+    bbox: [78.03, 9.85, 78.22, 10.0],
+  },
+  {
+    id: 'trichy',
+    label: 'Tiruchirappalli, Tamil Nadu',
+    shortLabel: 'Trichy TN',
+    center: [78.7047, 10.7905],
+    zoom: 12.5,
+    bbox: [78.6, 10.72, 78.8, 10.88],
   },
 ];
 
@@ -263,7 +290,7 @@ export const TransportMap: React.FC<TransportMapProps> = ({
   // Map state
   const [activeSeverityFilter, setActiveSeverityFilter] = useState<string>('ALL');
   const [provenanceFilter, setProvenanceFilter] = useState<'ALL' | 'LIVE' | 'SIMULATED'>('ALL');
-  const [selectedRegionId, setSelectedRegionId] = useState<string>('sf');
+  const [selectedRegionId, setSelectedRegionId] = useState<string>('tn');
   const [isRegionMenuOpen, setIsRegionMenuOpen] = useState(false);
   const [showCongestionLayer, setShowCongestionLayer] = useState(true);
   const [showCorridorLayer, setShowCorridorLayer] = useState(true);
@@ -325,7 +352,7 @@ export const TransportMap: React.FC<TransportMapProps> = ({
     api.getTomTomStatus(forceRefresh)
       .then((status) => {
         setTomTomStatus(status);
-        if (status.is_operational) {
+        if (status.is_operational && preset.liveTrafficSupported !== false) {
           api.getTomTomIncidents(preset.bbox)
             .then((res) => {
               if (res.success && Array.isArray(res.incidents)) {

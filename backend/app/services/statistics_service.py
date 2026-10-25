@@ -3,6 +3,7 @@ from typing import Dict, Any, List
 from sqlalchemy.orm import Session
 from app.repositories.incident_repository import IncidentRepository
 from app.schemas.incident import IncidentStatisticsResponse
+from app.models.incident import Incident
 
 
 class StatisticsService:
@@ -15,26 +16,35 @@ class StatisticsService:
         category_counts = self.repo.count_by_category()
         status_counts = self.repo.count_by_status()
 
-        # Generate realistic 24-hour trend series based on real database records + temporal weighting
+        # 24-hour trend computed from incidents actually recorded in each hour (no synthetic curve).
         now = datetime.now(timezone.utc)
-        hourly_trends: List[Dict[str, Any]] = []
-        for i in range(23, -1, -1):
-            hour_point = now - timedelta(hours=i)
-            # hour label e.g. "14:00"
-            hour_label = hour_point.strftime("%H:00")
-            
-            # Baseline dynamic activity curve (morning & evening peaks common in transport systems)
-            hour_val = hour_point.hour
-            is_peak = (7 <= hour_val <= 9) or (16 <= hour_val <= 19)
-            base_incidents = 4 if is_peak else 1
-            congestion_base = 65.0 if is_peak else 25.0
+        window_start = (now - timedelta(hours=23)).replace(minute=0, second=0, microsecond=0)
+        recent = (
+            self.repo.db.query(Incident.created_at, Incident.congestion_level_pct, Incident.current_speed_kmh)
+            .filter(Incident.created_at >= window_start)
+            .all()
+        )
+        buckets: Dict[int, List[Any]] = {}
+        for created_at, congestion, speed in recent:
+            if created_at is None:
+                continue
+            ts = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+            idx = int((ts - window_start).total_seconds() // 3600)
+            if 0 <= idx < 24:
+                buckets.setdefault(idx, []).append((congestion, speed))
 
+        hourly_trends: List[Dict[str, Any]] = []
+        for idx in range(24):
+            hour_point = window_start + timedelta(hours=idx)
+            rows = buckets.get(idx, [])
+            cong = [c for c, _ in rows if c is not None]
+            spd = [v for _, v in rows if v is not None]
             hourly_trends.append({
                 "timestamp": hour_point.isoformat(),
-                "hour": hour_label,
-                "incident_count": base_incidents + (aggregates["total_incidents"] % 3),
-                "congestion_pct": min(100.0, round(congestion_base + (aggregates["average_congestion_pct"] * 0.4), 1)),
-                "average_speed_kmh": round(max(20.0, 75.0 - (congestion_base * 0.5)), 1),
+                "hour": hour_point.strftime("%H:00"),
+                "incident_count": len(rows),
+                "congestion_pct": round(sum(cong) / len(cong), 1) if cong else 0.0,
+                "average_speed_kmh": round(sum(spd) / len(spd), 1) if spd else 0.0,
             })
 
         return IncidentStatisticsResponse(
@@ -43,7 +53,7 @@ class StatisticsService:
             critical_incidents=aggregates["critical_incidents"],
             high_priority_incidents=aggregates["high_priority_incidents"],
             average_congestion_pct=aggregates["average_congestion_pct"],
-            monitored_corridors_count=max(aggregates["monitored_corridors_count"], 6),
+            monitored_corridors_count=aggregates["monitored_corridors_count"],
             severity_breakdown=severity_counts,
             category_breakdown=category_counts,
             status_breakdown=status_counts,

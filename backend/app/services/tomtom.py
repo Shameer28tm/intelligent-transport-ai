@@ -21,12 +21,10 @@ CACHE_TTL_SECONDS = 60.0
 
 def mask_secret(val: Optional[str]) -> str:
     """Mask secret for safe diagnostic reporting without leaking raw credentials."""
-    if not val:
+    if not val or not val.strip():
         return "not_configured"
-    val = val.strip()
-    if len(val) <= 8:
-        return "******"
-    return f"{val[:4]}...{val[-4:]}"
+    return "configured"
+
 
 
 def sanitize_url(url: str) -> str:
@@ -96,8 +94,8 @@ class TomTomTrafficService:
             return res
 
         # Probe TomTom Traffic API with a lightweight test request
-        # Testing Flow Segment endpoint on project reference coordinates (San Francisco Market St)
-        probe_url = f"{FLOW_BASE_URL}/absolute/10/json?key={urllib.parse.quote(self.api_key)}&point=37.7749,-122.4194"
+        # Testing Flow Segment endpoint on project reference coordinates (Anna Salai, Chennai)
+        probe_url = f"{FLOW_BASE_URL}/absolute/10/json?key={urllib.parse.quote(self.api_key)}&point=13.0604,80.2496"
         req = urllib.request.Request(
             probe_url,
             headers={
@@ -307,9 +305,9 @@ class TomTomTrafficService:
                 "incidents": [],
             }
 
-        # Default bounding box: San Francisco metropolitan area
+        # Default bounding box: Chennai metropolitan area
         if not bbox:
-            bbox = (-122.52, 37.70, -122.35, 37.82)
+            bbox = (80.12, 12.92, 80.32, 13.18)
 
         min_lon, min_lat, max_lon, max_lat = bbox
         cache_key = f"inc_{round(min_lon, 3)}_{round(min_lat, 3)}_{round(max_lon, 3)}_{round(max_lat, 3)}"
@@ -348,16 +346,22 @@ class TomTomTrafficService:
                         geom = inc.get("geometry", {})
                         coords = geom.get("coordinates", [])
 
-                        # Extract anchor point (first coordinate pair: [lon, lat])
-                        lat = 37.7749
-                        lng = -122.4194
+                        # Extract anchor point (first coordinate pair: [lon, lat]).
+                        # Incidents without usable geometry are skipped, never placed at a default location.
+                        lat = lng = None
                         if coords and len(coords) > 0:
-                            first_pt = coords[0]
+                            # Point geometry is [lon, lat]; LineString is [[lon, lat], ...]
+                            first_pt = coords if isinstance(coords[0], (int, float)) else coords[0]
                             if isinstance(first_pt, (list, tuple)) and len(first_pt) >= 2:
                                 if isinstance(first_pt[0], (list, tuple)):
                                     first_pt = first_pt[0]
-                                lng = float(first_pt[0])
-                                lat = float(first_pt[1])
+                                try:
+                                    lng = float(first_pt[0])
+                                    lat = float(first_pt[1])
+                                except (TypeError, ValueError, IndexError):
+                                    lat = lng = None
+                        if lat is None or lng is None or not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                            continue
 
                         # Map category safely handling both integer codes and string values
                         raw_cat = props.get("iconCategory")

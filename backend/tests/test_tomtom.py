@@ -11,8 +11,8 @@ from app.services.tomtom import get_tomtom_service, mask_secret, sanitize_url
 def test_mask_secret():
     assert mask_secret(None) == "not_configured"
     assert mask_secret("") == "not_configured"
-    assert mask_secret("short") == "******"
-    assert mask_secret("1234567890abcdef") == "1234...cdef"
+    assert mask_secret("short") == "configured"
+    assert mask_secret("1234567890abcdef") == "configured"
 
 
 def test_sanitize_url():
@@ -383,3 +383,30 @@ def test_tomtom_incidents_invalid_bbox(client):
     assert data["success"] is False
     assert data["http_status_code"] == 400
     assert "Invalid bounding box" in data["error"]
+
+
+def test_tomtom_incident_without_geometry_is_skipped(client, monkeypatch):
+    """An incident with no usable coordinates must be dropped, never placed at a default location."""
+    service = get_tomtom_service()
+    monkeypatch.setattr(service, "api_key", "test_key_no_geometry")
+    service._incidents_cache.clear()
+
+    payload = {
+        "incidents": [
+            {"type": "Feature", "geometry": {"type": "LineString", "coordinates": []},
+             "properties": {"id": "no_geom", "iconCategory": 1}},
+            {"type": "Feature", "geometry": {"type": "Point", "coordinates": [80.2045, 13.0067]},
+             "properties": {"id": "kathipara", "iconCategory": 1}},
+        ]
+    }
+    mock_resp = MagicMock()
+    mock_resp.status = 200
+    mock_resp.__enter__.return_value = mock_resp
+    mock_resp.read.return_value = json.dumps(payload).encode("utf-8")
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: mock_resp)
+
+    response = client.get("/api/tomtom/incidents?min_lon=80.12&min_lat=12.92&max_lon=80.32&max_lat=13.18")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["count"] == 1
+    assert data["incidents"][0]["latitude"] == 13.0067

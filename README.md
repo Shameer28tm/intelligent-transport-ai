@@ -7,7 +7,26 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6.svg?logo=typescript)](https://www.typescriptlang.org)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-38B2AC.svg?logo=tailwind-css)](https://tailwindcss.com)
 
-A competition-ready, extensible intelligent transport and road safety command center inspired by professional urban mobility analytics platforms (Aimsun, PTV Visum, Iteris, Siemens Mobility). The system combines an enterprise operational dashboard, geographic traffic visualization, road incident lifecycle management, corridor performance analytics, and an extensible road-safety computer vision integration layer.
+A road-safety command center focused on **Tamil Nadu**. In 2024, Tamil Nadu recorded the most road accidents in India (67,526) and the second-most deaths (18,449), plus the most deaths of riders not wearing helmets (7,744) ([MoRTH data via The News Minute](https://www.thenewsminute.com/news/tamil-nadu-had-highest-accidents-and-helmet-related-deaths-in-2024-says-govt-data)). The platform combines camera-based detection and tracking, rider-safety checks, trajectory risk estimates, crash-hotspot analytics and golden-hour emergency support.
+
+---
+
+## 🛡️ Tamil Nadu Road Safety
+
+| Module | What it does | What it is not |
+| :--- | :--- | :--- |
+| **TN Road Safety** (`/api/safety/summary`, `/hotspots`, `/context`) | Clusters stored crash incidents into hotspots (500 m, haversine) and flags clusters that meet the MoRTH-style black-corridor rule (5 serious crashes within 500 m in 3 years). Shows district, severity and IST time-of-day breakdowns, plus cited statewide figures. | Not official crash data: the seeded incidents are **simulated demo data**. District assignment uses the nearest HQ city, not official boundaries. |
+| **Emergency Response** (`/api/safety/facilities`) | For an active crash, shows the golden-hour clock, the 5 nearest government medical college hospitals (straight-line distance), one-tap 108/112 calls and Google Maps road directions. Explains the IK:NK-48 cashless trauma scheme with its source. | Hospital locations are city-level approximations to verify; this is not a dispatch system. |
+| **Rider Safety** (live camera) | Flags **triple riding** (3+ person boxes on one tracked motorcycle for 3+ frames) and **wrong-side driving** (sustained motion against the permitted direction configured per camera). Each flag carries evidence and a "Pause at" seek. | **Helmet use is not checked:** the bundled COCO model has no helmet class. Flags are candidates for human review, not offence records. |
+| **Traffic Premonition** | Now also covers **vehicle–pedestrian** conflicts. Riders on two-wheelers are excluded so they aren't counted as pedestrians. | Image-plane estimate, not a collision prediction. |
+
+The map defaults to a statewide Tamil Nadu view, with presets for Chennai, Coimbatore, Madurai, Trichy and NH-45 Vikravandi. Live TomTom incidents load only for city or corridor presets, because TomTom limits the query area.
+
+**Refresh demo data on an existing database.** This deletes only `is_simulated=True` rows; real records are never touched:
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m app.seed --replace-demo
+```
 
 ---
 

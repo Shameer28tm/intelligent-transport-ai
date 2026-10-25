@@ -5,6 +5,7 @@ import { Header } from './components/common/Header';
 import { Sidebar } from './components/common/Sidebar';
 import { IncidentFormModal } from './components/incidents/IncidentFormModal';
 import { VisionUploadModal } from './components/vision/VisionUploadModal';
+import { VoiceAssistantWidget } from './components/voice/VoiceAssistantWidget';
 
 import { OverviewPage } from './pages/OverviewPage';
 import { LiveMapPage } from './pages/LiveMapPage';
@@ -16,6 +17,7 @@ import { TransportPlanningPage } from './pages/TransportPlanningPage';
 import { SustainableMobilityPage } from './pages/SustainableMobilityPage';
 import { AccessibilityPage } from './pages/AccessibilityPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { EmergencyResponsePage } from './pages/EmergencyResponsePage';
 
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'degraded';
 
@@ -200,6 +202,8 @@ export const App: React.FC = () => {
             />
           )}
 
+          {activeModule === 'emergency' && <EmergencyResponsePage incidents={incidents} />}
+
           {activeModule === 'traffic' && (
             <TrafficManagementPage
               incidents={incidents}
@@ -245,6 +249,19 @@ export const App: React.FC = () => {
       <VisionUploadModal
         isOpen={isVisionModalOpen}
         onClose={() => setIsVisionModalOpen(false)}
+      />
+
+      {/* Multilingual Voice Assistant (Tamil / Thanglish / English) */}
+      <VoiceAssistantWidget
+        activeModule={activeModule}
+        onNavigate={setActiveModule}
+        onSelectIncident={(incId) => {
+          const found = incidents.find((i) => i.id === incId);
+          if (found) {
+            setSelectedIncident(found);
+            setActiveModule('overview');
+          }
+        }}
       />
     </div>
   );

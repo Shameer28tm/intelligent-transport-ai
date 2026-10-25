@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   ShieldAlert,
+  Siren,
   TrafficCone,
   FileSearch,
   GitFork,
@@ -10,7 +11,6 @@ import {
   Flame,
   X,
   Video,
-  Sparkles,
   Map,
 } from 'lucide-react';
 import { AppModule } from '../../types';
@@ -46,12 +46,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'traffic-intelligence',
       label: 'Traffic Intelligence',
       icon: <Video className="h-4 w-4" />,
-      badge: (
-        <span className="flex items-center gap-1 rounded bg-sky-950/80 px-1.5 py-0.5 text-[9px] font-bold text-sky-300 border border-sky-800/50">
-          <Sparkles className="h-2.5 w-2.5 text-sky-400" />
-          P3
-        </span>
-      ),
+    },
+    {
+      id: 'safety',
+      label: 'TN Road Safety',
+      icon: <ShieldAlert className="h-4 w-4" />,
+    },
+    {
+      id: 'emergency',
+      label: 'Emergency Response',
+      icon: <Siren className="h-4 w-4" />,
     },
     {
       id: 'explorer',
@@ -74,11 +78,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Secondary Operations Modules (Preserved Features)
   const secondaryNavItems: { id: AppModule; label: string; icon: React.ReactNode }[] = [
-    {
-      id: 'safety',
-      label: 'Road Safety',
-      icon: <ShieldAlert className="h-4 w-4" />,
-    },
     {
       id: 'traffic',
       label: 'Traffic Corridors',
@@ -170,7 +169,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Additional Modules */}
             <div>
               <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-slate-400 dark:text-slate-500 uppercase font-mono">
-                Transport Planning & Corridors
+                Illustrative concepts (not TN data)
               </div>
               <nav className="mt-1 space-y-0.5">
                 {secondaryNavItems.map((item) => {

@@ -44,3 +44,14 @@ def test_health_degraded_when_database_unreachable(client, monkeypatch):
         assert data["database"]["latency_ms"] >= 0.0 or data["database"]["latency_ms"] == -1.0
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+def test_security_headers(client):
+    """Verify security headers are applied to HTTP responses."""
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.headers.get("X-Content-Type-Options") == "nosniff"
+    assert response.headers.get("X-Frame-Options") == "DENY"
+    assert response.headers.get("X-XSS-Protection") == "1; mode=block"
+    assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+

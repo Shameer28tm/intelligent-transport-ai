@@ -56,6 +56,14 @@ class Settings(BaseSettings):
     # TomTom Traffic API Integration (Server-Side Only)
     TOMTOM_API_KEY: str = ""
 
+    # Multilingual Voice Assistant (Sarvam AI & Google Gemini)
+    SARVAM_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    SARVAM_STT_MODEL: str = "saaras:v4"
+    SARVAM_TTS_MODEL: str = "bulbul:v4-flash"
+    SARVAM_TTS_SPEAKER: str = "gokul_ta_narration"
+
     model_config = SettingsConfigDict(
         env_file=tuple(_env_files),
         env_file_encoding="utf-8",

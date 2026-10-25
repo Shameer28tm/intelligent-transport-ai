@@ -107,7 +107,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
               </p>
             </div>
             <span className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] px-2.5 py-1 text-[11px] font-mono text-slate-600 dark:text-slate-400 shadow-xs">
-              Area: San Francisco (sample data)
+              Area: Tamil Nadu (simulated demo data)
             </span>
           </div>
 

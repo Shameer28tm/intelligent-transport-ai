@@ -55,6 +55,7 @@ REASON_TEXT: Dict[str, str] = {
 }
 
 VEHICLE_CLASSES = frozenset({"car", "bus", "truck", "motorcycle", "bicycle"})
+PEDESTRIAN = "pedestrian"  # COCO person; included for vehicle-pedestrian pairs only
 
 LIMITATIONS: List[str] = [
     "Image-plane estimate: distances are in frame-height units (fh), not metres.",
@@ -82,6 +83,7 @@ class RiskEstimatorConfig:
     min_gap_reduction_fh: float = 0.02
     max_fit_rms_fh: float = 0.025       # above this residual a track is "inconsistent"
     max_pairs: int = 60                 # hard cap on evaluated pairs per frame
+    include_pedestrians: bool = True    # evaluate vehicle-pedestrian pairs (never pedestrian-pedestrian)
     reset_backstep_sec: float = 0.05    # timestamp going back by more than this = seek/reset
     event_close_after_sec: float = 1.0  # an event closes after this long without conflict
     max_events: int = 100
@@ -161,12 +163,39 @@ class TrajectoryRiskEstimator:
     def _ingest(self, detections: Iterable[Dict], ts: float, aspect: float) -> List[int]:
         cfg = self.config
         seen: List[int] = []
+        detections = list(detections)
+        # Persons sitting on a two-wheeler are riders, not pedestrians: exclude them so a
+        # motorcycle conflict is not double-counted through its rider.
+        two_wheeler_boxes = []
+        for det in detections:
+            if det.get("class_name") in ("motorcycle", "bicycle"):
+                b = det.get("box") or {}
+                try:
+                    two_wheeler_boxes.append(tuple(float(b[k]) for k in ("x_min", "y_min", "x_max", "y_max")))
+                except (KeyError, TypeError, ValueError):
+                    pass
+
+        def _is_rider(box: Dict) -> bool:
+            try:
+                cx = (float(box["x_min"]) + float(box["x_max"])) / 2.0
+                foot = float(box["y_max"])
+            except (KeyError, TypeError, ValueError):
+                return False
+            for (mx0, my0, mx1, my1) in two_wheeler_boxes:
+                h = my1 - my0
+                if mx0 <= cx <= mx1 and my0 - 0.1 * h <= foot <= my1 + 0.15 * h:
+                    return True
+            return False
+
         for det in detections:
             tid = det.get("track_id")
             cls = det.get("class_name")
             box = det.get("box") or {}
-            if cls not in VEHICLE_CLASSES:
-                continue  # pedestrians / signs are out of scope for vehicle-pair conflicts
+            if cls == PEDESTRIAN:
+                if not cfg.include_pedestrians or _is_rider(box):
+                    continue
+            elif cls not in VEHICLE_CLASSES:
+                continue  # signs, traffic lights etc. are out of scope
             if not isinstance(tid, int) or isinstance(tid, bool):
                 self.rejected_observations += 1  # missing or malformed track ID
                 continue
@@ -312,6 +341,7 @@ class TrajectoryRiskEstimator:
         return {
             "track_ids": [a, b],
             "class_names": [self._classes.get(a), self._classes.get(b)],
+            "pair_type": "VEHICLE_PEDESTRIAN" if PEDESTRIAN in (self._classes.get(a), self._classes.get(b)) else "VEHICLE_VEHICLE",
             "state": state,
             "reasons": reasons,
             "measurements": {
@@ -445,10 +475,10 @@ class TrajectoryRiskEstimator:
             if quality in ("HIGH", "MEDIUM"):
                 qualified.append(tid)
 
-        if not seen:
+        if not any(self._classes.get(t) in VEHICLE_CLASSES for t in seen):
             self._update_events([], {}, ts)
             return self._result(STATE_MONITORING, ["NO_ACTIVE_VEHICLES"], ts, tracks_out, [], 0, 0)
-        if len(qualified) < 2:
+        if len(qualified) < 2 or not any(self._classes.get(t) in VEHICLE_CLASSES for t in qualified):
             self._update_events([], {}, ts)
             return self._result(STATE_INSUFFICIENT_EVIDENCE, ["FEWER_THAN_TWO_QUALIFIED_TRACKS"], ts,
                                 tracks_out, [], 0, 0)
@@ -459,6 +489,8 @@ class TrajectoryRiskEstimator:
         for i, a in enumerate(qualified):
             fa = fits[a]
             for b in qualified[i + 1:]:
+                if self._classes.get(a) == PEDESTRIAN and self._classes.get(b) == PEDESTRIAN:
+                    continue  # pedestrian-pedestrian pairs are out of scope
                 fb = fits[b]
                 dist = math.hypot(fb.x - fa.x, fb.y - fa.y)
                 reach = math.hypot(fb.vx - fa.vx, fb.vy - fa.vy) * cfg.horizon_sec

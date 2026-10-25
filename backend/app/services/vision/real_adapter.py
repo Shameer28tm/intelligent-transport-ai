@@ -29,6 +29,7 @@ from app.schemas.vision import (
 from app.services.vision.base import BaseVisionService
 from app.services.vision.tracker import IoUTracker
 from app.services.vision.risk_estimator import TrajectoryRiskEstimator
+from app.services.vision.rider_safety import RiderSafetyMonitor
 
 settings = get_settings()
 
@@ -53,6 +54,7 @@ def get_or_create_live_tracker(session_id: str, cordon_y: float = 0.60) -> IoUTr
     tracker = IoUTracker(iou_threshold=0.25, max_lost=3, min_hits_for_unique=1, cordon_y=cordon_y)
     # Traffic Premonition state lives on the tracker so a session reset clears both together.
     tracker.risk_estimator = TrajectoryRiskEstimator()
+    tracker.rider_monitor = RiderSafetyMonitor()
     _LIVE_SESSION_TRACKERS[session_id] = (tracker, now)
     return tracker
 
@@ -84,6 +86,25 @@ def reset_live_tracker(session_id: str) -> bool:
     return False
 
 
+def assess_live_rider_safety(
+    tracker: IoUTracker, tracked_detections: List[Dict], timestamp_sec: Optional[float],
+    permitted_direction: Optional[str],
+) -> Optional[Dict]:
+    """Run rule-based rider-safety checks (triple riding, wrong side) on the tracker output.
+
+    Never raises: a failure returns None so detection results are still delivered.
+    """
+    monitor = getattr(tracker, "rider_monitor", None)
+    if monitor is None:
+        monitor = RiderSafetyMonitor()
+        tracker.rider_monitor = monitor
+    try:
+        return monitor.process_frame(tracked_detections, timestamp_sec, permitted_direction)
+    except Exception as exc:  # defensive: rider checks must not break detection
+        print(f"[Transport AI] Rider safety check skipped for frame: {type(exc).__name__}")
+        return None
+
+
 def get_live_tracker_summary(session_id: str) -> Optional[Dict]:
     """Retrieve finalized summary from live tracker if available."""
     if session_id in _LIVE_SESSION_TRACKERS:
@@ -92,6 +113,8 @@ def get_live_tracker_summary(session_id: str) -> Optional[Dict]:
         summary = tracker.get_summary()
         estimator = getattr(tracker, "risk_estimator", None)
         summary["risk_events"] = estimator.events() if estimator is not None else []
+        monitor = getattr(tracker, "rider_monitor", None)
+        summary["rider_safety_events"] = monitor.events() if monitor is not None else []
         return summary
     return None
 
@@ -486,6 +509,7 @@ class RealVisionAdapter(BaseVisionService):
         generate_preview: bool = True,
         timestamp_sec: Optional[float] = None,
         source_aspect_ratio: Optional[float] = None,
+        permitted_direction: Optional[str] = None,
     ) -> VisionAnalysisResult:
         start_time = time.perf_counter()
 
@@ -525,6 +549,7 @@ class RealVisionAdapter(BaseVisionService):
                 timestamp_sec=timestamp_sec,
                 generate_preview=generate_preview,
                 source_aspect_ratio=source_aspect_ratio,
+                permitted_direction=permitted_direction,
             )
 
     async def _analyze_image(
@@ -540,6 +565,7 @@ class RealVisionAdapter(BaseVisionService):
         timestamp_sec: Optional[float] = None,
         generate_preview: bool = True,
         source_aspect_ratio: Optional[float] = None,
+        permitted_direction: Optional[str] = None,
     ) -> VisionAnalysisResult:
         try:
             img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
@@ -553,6 +579,7 @@ class RealVisionAdapter(BaseVisionService):
         event_items: List[TrafficEvent] = []
         unique_vehicles_tracked = None
         premonition: Optional[Dict[str, Any]] = None
+        rider_safety: Optional[Dict[str, Any]] = None
 
         if enable_tracking and session_id:
             tracker = get_or_create_live_tracker(session_id, cordon_y=cordon_y)
@@ -572,6 +599,7 @@ class RealVisionAdapter(BaseVisionService):
                 width / height if height else 16 / 9
             )
             premonition = assess_live_premonition(tracker, tracked_det_dicts, timestamp_sec, aspect)
+            rider_safety = assess_live_rider_safety(tracker, tracked_det_dicts, timestamp_sec, permitted_direction)
             detections = [
                 DetectedObject(
                     id=td["id"],
@@ -672,6 +700,7 @@ class RealVisionAdapter(BaseVisionService):
             detected_objects=detections,
             events=event_items if event_items else None,
             premonition=premonition,
+            rider_safety=rider_safety,
             recommendations=recommendations,
             timestamp=datetime.now(timezone.utc),
             fps_processed=round(1000.0 / processing_time_ms, 2) if processing_time_ms > 0 else 0.0,
