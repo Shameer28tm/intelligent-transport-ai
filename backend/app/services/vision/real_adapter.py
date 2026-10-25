@@ -28,6 +28,8 @@ from app.schemas.vision import (
 )
 from app.services.vision.base import BaseVisionService
 from app.services.vision.tracker import IoUTracker
+from app.services.vision.risk_estimator import TrajectoryRiskEstimator
+from app.services.vision.rider_safety import RiderSafetyMonitor
 
 settings = get_settings()
 
@@ -50,8 +52,30 @@ def get_or_create_live_tracker(session_id: str, cordon_y: float = 0.60) -> IoUTr
         return tracker
 
     tracker = IoUTracker(iou_threshold=0.25, max_lost=3, min_hits_for_unique=1, cordon_y=cordon_y)
+    # Traffic Premonition state lives on the tracker so a session reset clears both together.
+    tracker.risk_estimator = TrajectoryRiskEstimator()
+    tracker.rider_monitor = RiderSafetyMonitor()
     _LIVE_SESSION_TRACKERS[session_id] = (tracker, now)
     return tracker
+
+
+def assess_live_premonition(
+    tracker: IoUTracker, tracked_detections: List[Dict], timestamp_sec: Optional[float], aspect_ratio: float
+) -> Optional[Dict]:
+    """Run the trajectory risk estimator on the tracker's output for one live frame.
+
+    Reuses the detections and track IDs the tracker just produced; no second inference.
+    Never raises: a failure returns None so detection results are still delivered.
+    """
+    estimator = getattr(tracker, "risk_estimator", None)
+    if estimator is None:
+        estimator = TrajectoryRiskEstimator()
+        tracker.risk_estimator = estimator
+    try:
+        return estimator.process_frame(tracked_detections, timestamp_sec, aspect_ratio)
+    except Exception as exc:  # defensive: the premonition layer must not break detection
+        print(f"[Transport AI] Traffic Premonition skipped for frame: {type(exc).__name__}")
+        return None
 
 
 def reset_live_tracker(session_id: str) -> bool:
@@ -62,12 +86,36 @@ def reset_live_tracker(session_id: str) -> bool:
     return False
 
 
+def assess_live_rider_safety(
+    tracker: IoUTracker, tracked_detections: List[Dict], timestamp_sec: Optional[float],
+    permitted_direction: Optional[str],
+) -> Optional[Dict]:
+    """Run rule-based rider-safety checks (triple riding, wrong side) on the tracker output.
+
+    Never raises: a failure returns None so detection results are still delivered.
+    """
+    monitor = getattr(tracker, "rider_monitor", None)
+    if monitor is None:
+        monitor = RiderSafetyMonitor()
+        tracker.rider_monitor = monitor
+    try:
+        return monitor.process_frame(tracked_detections, timestamp_sec, permitted_direction)
+    except Exception as exc:  # defensive: rider checks must not break detection
+        print(f"[Transport AI] Rider safety check skipped for frame: {type(exc).__name__}")
+        return None
+
+
 def get_live_tracker_summary(session_id: str) -> Optional[Dict]:
     """Retrieve finalized summary from live tracker if available."""
     if session_id in _LIVE_SESSION_TRACKERS:
         tracker, _ = _LIVE_SESSION_TRACKERS[session_id]
         tracker.finalize()
-        return tracker.get_summary()
+        summary = tracker.get_summary()
+        estimator = getattr(tracker, "risk_estimator", None)
+        summary["risk_events"] = estimator.events() if estimator is not None else []
+        monitor = getattr(tracker, "rider_monitor", None)
+        summary["rider_safety_events"] = monitor.events() if monitor is not None else []
+        return summary
     return None
 
 COCO_CLASSES: Dict[int, str] = {
@@ -355,24 +403,52 @@ class RealVisionAdapter(BaseVisionService):
         return f"data:image/jpeg;base64,{b64}"
 
     def _probe_video_metadata(self, video_path: str) -> Tuple[float, int, int]:
-        """Extract video duration and resolution using ffprobe or fallback."""
+        """Extract video duration and resolution using ffprobe.
+
+        Raises RuntimeError with actionable error message if ffprobe is unavailable,
+        fails, or returns invalid duration/dimensions. Never invents metadata.
+        """
         cmd = [
             "ffprobe",
             "-v", "error",
-            "-show_entries", "format=duration:stream=width,height",
+            "-show_entries", "format=duration:stream=width,height,duration",
             "-of", "json",
             video_path,
         ]
         try:
             res = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=10)
             data = json.loads(res.stdout)
-            duration = float(data.get("format", {}).get("duration", 0.0))
-            streams = data.get("streams", [{}])
-            width = int(streams[0].get("width", 1280)) if streams else 1280
-            height = int(streams[0].get("height", 720)) if streams else 720
+            format_duration = data.get("format", {}).get("duration")
+            streams = data.get("streams", [])
+            stream_duration = streams[0].get("duration") if streams else None
+
+            dur_str = format_duration or stream_duration
+            if dur_str is None:
+                raise ValueError("Video duration metadata is missing.")
+            duration = float(dur_str)
+            if duration <= 0.0:
+                raise ValueError(f"Video duration is non-positive ({duration}s).")
+
+            width = int(streams[0].get("width", 0)) if streams else 0
+            height = int(streams[0].get("height", 0)) if streams else 0
+            if width <= 0 or height <= 0:
+                raise ValueError(f"Invalid video stream resolution ({width}x{height}).")
+
             return duration, width, height
-        except Exception:
-            return 3.0, 1280, 720
+        except FileNotFoundError:
+            raise RuntimeError(
+                "ffprobe executable not found on PATH. "
+                "Please install FFmpeg (https://ffmpeg.org) or ensure ffprobe is available in system PATH "
+                "for server-side video analysis."
+            )
+        except subprocess.CalledProcessError as cpe:
+            err_msg = cpe.stderr.strip() if cpe.stderr else str(cpe)
+            raise RuntimeError(f"ffprobe failed to inspect video file: {err_msg}")
+        except Exception as e:
+            raise RuntimeError(
+                f"Video metadata extraction failed: {str(e)}. "
+                "Ensure ffprobe is available and the input file is a valid H.264/MP4 video."
+            )
 
     def _sample_video_frames(
         self,
@@ -384,6 +460,7 @@ class RealVisionAdapter(BaseVisionService):
         """
         Sample frames from video using ffmpeg at specified FPS.
         Returns list of (frame_filepath, timestamp_seconds) strictly sorted by timestamp.
+        Raises RuntimeError if ffmpeg is unavailable or fails. Never substitutes static images.
         """
         output_pattern = os.path.join(output_dir, "frame_%04d.jpg")
         cmd = [
@@ -395,9 +472,18 @@ class RealVisionAdapter(BaseVisionService):
             output_pattern,
         ]
         try:
-            subprocess.run(cmd, check=True, timeout=45)
+            subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=45)
+        except FileNotFoundError:
+            raise RuntimeError(
+                "ffmpeg executable not found on PATH. "
+                "Please install FFmpeg (https://ffmpeg.org) or add ffmpeg to system PATH "
+                "for server-side video frame extraction."
+            )
+        except subprocess.CalledProcessError as cpe:
+            err_msg = cpe.stderr.strip() if cpe.stderr else str(cpe)
+            raise RuntimeError(f"FFmpeg video frame decoding failed: {err_msg}")
         except Exception as e:
-            raise RuntimeError(f"FFmpeg frame extraction failed: {e}")
+            raise RuntimeError(f"FFmpeg video frame extraction failed: {str(e)}")
 
         extracted = sorted([f for f in os.listdir(output_dir) if f.startswith("frame_") and f.endswith(".jpg")])
         if not extracted:
@@ -422,6 +508,8 @@ class RealVisionAdapter(BaseVisionService):
         session_id: Optional[str] = None,
         generate_preview: bool = True,
         timestamp_sec: Optional[float] = None,
+        source_aspect_ratio: Optional[float] = None,
+        permitted_direction: Optional[str] = None,
     ) -> VisionAnalysisResult:
         start_time = time.perf_counter()
 
@@ -460,6 +548,8 @@ class RealVisionAdapter(BaseVisionService):
                 cordon_y=cordon_y,
                 timestamp_sec=timestamp_sec,
                 generate_preview=generate_preview,
+                source_aspect_ratio=source_aspect_ratio,
+                permitted_direction=permitted_direction,
             )
 
     async def _analyze_image(
@@ -474,6 +564,8 @@ class RealVisionAdapter(BaseVisionService):
         cordon_y: float = 0.60,
         timestamp_sec: Optional[float] = None,
         generate_preview: bool = True,
+        source_aspect_ratio: Optional[float] = None,
+        permitted_direction: Optional[str] = None,
     ) -> VisionAnalysisResult:
         try:
             img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
@@ -486,6 +578,8 @@ class RealVisionAdapter(BaseVisionService):
         # In-flight live tracking association across consecutive playback frames
         event_items: List[TrafficEvent] = []
         unique_vehicles_tracked = None
+        premonition: Optional[Dict[str, Any]] = None
+        rider_safety: Optional[Dict[str, Any]] = None
 
         if enable_tracking and session_id:
             tracker = get_or_create_live_tracker(session_id, cordon_y=cordon_y)
@@ -500,6 +594,12 @@ class RealVisionAdapter(BaseVisionService):
                 for d in detections
             ]
             tracked_det_dicts = tracker.update_frame(det_dicts, timestamp_sec=ts)
+            # The live frame is resized to a fixed canvas, so prefer the source video's true aspect ratio.
+            aspect = source_aspect_ratio if source_aspect_ratio and 0.2 < source_aspect_ratio < 5.0 else (
+                width / height if height else 16 / 9
+            )
+            premonition = assess_live_premonition(tracker, tracked_det_dicts, timestamp_sec, aspect)
+            rider_safety = assess_live_rider_safety(tracker, tracked_det_dicts, timestamp_sec, permitted_direction)
             detections = [
                 DetectedObject(
                     id=td["id"],
@@ -599,6 +699,8 @@ class RealVisionAdapter(BaseVisionService):
             detected_hazards=["Vulnerable road user activity present"] if pedestrian_count > 0 else [],
             detected_objects=detections,
             events=event_items if event_items else None,
+            premonition=premonition,
+            rider_safety=rider_safety,
             recommendations=recommendations,
             timestamp=datetime.now(timezone.utc),
             fps_processed=round(1000.0 / processing_time_ms, 2) if processing_time_ms > 0 else 0.0,

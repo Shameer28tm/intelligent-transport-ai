@@ -1,5 +1,6 @@
 import time
 import shutil
+import subprocess
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -17,15 +18,17 @@ def get_system_health(db: Session = Depends(get_db)):
     """
     Returns system operational health, database connectivity latency,
     storage status, and active vision AI subsystem status.
+    Responds within <10s even if external database is unavailable.
     """
     start_db = time.perf_counter()
     db_status = "connected"
+    db_latency_ms = -1.0
     try:
         db.execute(text("SELECT 1"))
         db_latency_ms = round((time.perf_counter() - start_db) * 1000, 2)
     except Exception as e:
-        db_status = f"unreachable: {str(e)}"
-        db_latency_ms = -1.0
+        db_status = f"unreachable: {type(e).__name__}"
+        db_latency_ms = round((time.perf_counter() - start_db) * 1000, 2)
 
     vision_service = get_vision_service()
     db_info = get_db_info()
@@ -40,11 +43,39 @@ def get_system_health(db: Session = Depends(get_db)):
     except Exception:
         pass
 
-    import onnxruntime as ort
+    # Guard optional ONNX runtime import
+    ort_providers = []
     try:
+        import onnxruntime as ort
         ort_providers = ort.get_available_providers()
     except Exception:
-        ort_providers = ["CPUExecutionProvider"]
+        ort_providers = []
+
+    # Dynamic hardware readiness detection (never hardcode GPU models or CUDA readiness)
+    cuda_ready = "CUDAExecutionProvider" in ort_providers
+    execution_provider = "CUDAExecutionProvider" if cuda_ready else "CPUExecutionProvider"
+
+    detected_gpu = "None (CPU Execution)"
+    try:
+        smi = shutil.which("nvidia-smi")
+        if smi:
+            res = subprocess.run(
+                [smi, "--query-gpu=name", "--format=csv,noheader"],
+                capture_output=True,
+                text=True,
+                timeout=1.0,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                detected_gpu = res.stdout.strip().splitlines()[0].strip()
+    except Exception:
+        pass
+
+    if detected_gpu != "None (CPU Execution)" and not cuda_ready:
+        inference_runtime = f"ONNX Runtime ({execution_provider}) - Host GPU detected ({detected_gpu}), ONNX executing on CPU"
+    elif cuda_ready:
+        inference_runtime = f"ONNX Runtime ({execution_provider}) - Hardware Accelerated"
+    else:
+        inference_runtime = f"ONNX Runtime ({execution_provider})"
 
     return {
         "status": "healthy" if db_status == "connected" else "degraded",
@@ -61,7 +92,7 @@ def get_system_health(db: Session = Depends(get_db)):
             "active_adapter": vision_service.adapter_name,
             "is_simulated": vision_service.is_simulated,
             "is_available": vision_service.is_available(),
-            "execution_provider": "CPUExecutionProvider",
+            "execution_provider": execution_provider,
             "available_providers": ort_providers,
         },
         "storage": {
@@ -70,11 +101,11 @@ def get_system_health(db: Session = Depends(get_db)):
             "free_gb": free_gb,
         },
         "hardware_detection": {
-            "gpu_detected": "NVIDIA GeForce RTX 5060 Laptop GPU (8GB VRAM)",
-            "host_gpu": "NVIDIA GeForce RTX 5060 Laptop GPU (8GB VRAM)",
-            "inference_runtime": "ONNX Runtime (CPUExecutionProvider)",
-            "execution_provider": "CPUExecutionProvider",
-            "cuda_driver_ready": True,
+            "gpu_detected": detected_gpu,
+            "host_gpu": detected_gpu,
+            "inference_runtime": inference_runtime,
+            "execution_provider": execution_provider,
+            "cuda_driver_ready": cuda_ready,
             "phase": "P2 Release (Enterprise UI/UX + Mappls + Vision Workspace)",
         },
         "notice": "All test feeds default to SIMULATED DEMO DATA for operational testing.",

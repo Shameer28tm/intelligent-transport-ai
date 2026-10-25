@@ -2,9 +2,12 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, "feat/**" ]
   pull_request:
     branches: [ main ]
+
+permissions:
+  contents: read
 
 jobs:
   backend-test:
@@ -28,7 +31,13 @@ jobs:
       - name: Run pytest
         working-directory: ./backend
         run: |
-          pytest -v
+          python -m pytest -v --tb=short 2>&1 | tee pytest_output.log || {
+            echo "### Pytest Failure Output" >> $GITHUB_STEP_SUMMARY
+            echo '```text' >> $GITHUB_STEP_SUMMARY
+            tail -n 80 pytest_output.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
 
   frontend-build:
     name: Frontend Typecheck & Build
@@ -46,6 +55,10 @@ jobs:
       - name: Install dependencies
         working-directory: ./frontend
         run: npm ci
+
+      - name: Dependency security audit
+        working-directory: ./frontend
+        run: npm audit --audit-level=high
 
       - name: TypeScript check
         working-directory: ./frontend

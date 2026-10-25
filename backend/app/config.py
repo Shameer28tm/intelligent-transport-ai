@@ -48,10 +48,21 @@ class Settings(BaseSettings):
     # Demo configuration
     DEMO_DATA_TAG: str = "SIMULATED DEMO DATA"
 
-    # Mappls (MapmyIndia) Integration
+    # Mappls (MapmyIndia) Integration (Legacy)
     MAPPLS_CLIENT_ID: str = ""
     MAPPLS_CLIENT_SECRET: str = ""
     MAPPLS_REST_KEY: str = ""
+
+    # TomTom Traffic API Integration (Server-Side Only)
+    TOMTOM_API_KEY: str = ""
+
+    # Multilingual Voice Assistant (Sarvam AI & Google Gemini)
+    SARVAM_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    SARVAM_STT_MODEL: str = "saaras:v4"
+    SARVAM_TTS_MODEL: str = "bulbul:v4-flash"
+    SARVAM_TTS_SPEAKER: str = "gokul_ta_narration"
 
     model_config = SettingsConfigDict(
         env_file=tuple(_env_files),

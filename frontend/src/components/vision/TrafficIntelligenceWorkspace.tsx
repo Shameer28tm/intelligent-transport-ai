@@ -43,8 +43,12 @@ import {
   EvaluationSummary,
   TimeBucketSummary,
   TrafficEvent,
+  PremonitionResult,
+  RiderSafetyResult,
 } from '../../types';
 import { api } from '../../services/api';
+import { TrafficPremonitionPanel, PREMONITION_COLORS } from './TrafficPremonitionPanel';
+import { RiderSafetyPanel, PermittedDirection } from './RiderSafetyPanel';
 
 export type TrafficIntelligenceSubsection =
   | 'live_detection'
@@ -84,6 +88,14 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
   const [liveDetections, setLiveDetections] = useState<DetectedObject[]>([]);
   const [liveSummarySaved, setLiveSummarySaved] = useState<boolean>(false);
   const [isSavingLiveSummary, setIsSavingLiveSummary] = useState<boolean>(false);
+
+  // Traffic Premonition (trajectory risk estimate computed server-side from tracker output)
+  const [livePremonition, setLivePremonition] = useState<PremonitionResult | null>(null);
+  const [premonitionOverlayEnabled, setPremonitionOverlayEnabled] = useState<boolean>(true);
+
+  // Rider Safety (triple riding / wrong side candidates from the same tracked frames)
+  const [liveRiderSafety, setLiveRiderSafety] = useState<RiderSafetyResult | null>(null);
+  const [permittedDirection, setPermittedDirection] = useState<PermittedDirection>('none');
 
   // Selected-frame offline capture state
   const [capturedFrameBlob, setCapturedFrameBlob] = useState<Blob | null>(null);
@@ -179,7 +191,14 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
   // Responsive Letterbox Coordinate Mapping & Canvas Overlay
   // ==========================================
   const drawOverlayOnCanvas = useCallback(
-    (canvas: HTMLCanvasElement, video: HTMLVideoElement, detections: DetectedObject[], cordonPct: number) => {
+    (
+      canvas: HTMLCanvasElement,
+      video: HTMLVideoElement,
+      detections: DetectedObject[],
+      cordonPct: number,
+      premonition: PremonitionResult | null = null,
+      showPremonition = false
+    ) => {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
@@ -231,6 +250,50 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
       ctx.fillText('VIRTUAL CORDON LINE (Y: ' + Math.round(cordonPct * 100) + '%)', offsetX + 14, cordonPixelY - 8);
       ctx.restore();
 
+      // Traffic Premonition paths: observed = solid, projected = dashed.
+      // Only tracks visible in the current frame are drawn, so seeks/stops never leave stale paths.
+      if (showPremonition && premonition && detections.length > 0) {
+        const visible = new Set(detections.map((d) => d.track_id).filter((id): id is number => typeof id === 'number'));
+        const inConflict = new Set<number>();
+        premonition.pairs
+          .filter((p) => p.state === 'POTENTIAL_CONFLICT')
+          .forEach((p) => p.track_ids.forEach((id) => inConflict.add(id)));
+        const toPx = (pt: { x: number; y: number }) => [offsetX + pt.x * renderW, offsetY + pt.y * renderH] as const;
+
+        premonition.tracks.forEach((t) => {
+          if (!visible.has(t.track_id) || t.observed_path.length === 0) return;
+          const color = inConflict.has(t.track_id)
+            ? PREMONITION_COLORS.concern
+            : t.data_quality === 'HIGH' || t.data_quality === 'MEDIUM'
+              ? PREMONITION_COLORS.neutral
+              : PREMONITION_COLORS.unknown;
+          ctx.save();
+          ctx.strokeStyle = color;
+          ctx.lineWidth = inConflict.has(t.track_id) ? 3 : 2;
+          ctx.lineJoin = 'round';
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          t.observed_path.forEach((pt, i) => {
+            const [x, y] = toPx(pt);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+          if (t.projected_path.length > 0) {
+            ctx.setLineDash([6, 5]);
+            ctx.beginPath();
+            const [sx, sy] = toPx(t.observed_path[t.observed_path.length - 1]);
+            ctx.moveTo(sx, sy);
+            t.projected_path.forEach((pt) => {
+              const [x, y] = toPx(pt);
+              ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+          }
+          ctx.restore();
+        });
+      }
+
       // Draw Bounding Boxes with class color coding and tracking IDs
       detections.forEach((det) => {
         const { x_min, y_min, x_max, y_max } = det.box;
@@ -281,20 +344,34 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
   // Redraw overlay when detections or cordon line change
   useEffect(() => {
     if (liveOverlayCanvasRef.current && videoPlayerRef.current) {
-      drawOverlayOnCanvas(liveOverlayCanvasRef.current, videoPlayerRef.current, liveDetections, cordonY);
+      drawOverlayOnCanvas(
+        liveOverlayCanvasRef.current,
+        videoPlayerRef.current,
+        liveDetections,
+        cordonY,
+        livePremonition,
+        premonitionOverlayEnabled
+      );
     }
-  }, [liveDetections, cordonY, drawOverlayOnCanvas]);
+  }, [liveDetections, cordonY, livePremonition, premonitionOverlayEnabled, drawOverlayOnCanvas]);
 
   // Window resize observer to keep canvas overlay aligned
   useEffect(() => {
     const handleResize = () => {
       if (liveOverlayCanvasRef.current && videoPlayerRef.current) {
-        drawOverlayOnCanvas(liveOverlayCanvasRef.current, videoPlayerRef.current, liveDetections, cordonY);
+        drawOverlayOnCanvas(
+          liveOverlayCanvasRef.current,
+          videoPlayerRef.current,
+          liveDetections,
+          cordonY,
+          livePremonition,
+          premonitionOverlayEnabled
+        );
       }
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [liveDetections, cordonY, drawOverlayOnCanvas]);
+  }, [liveDetections, cordonY, livePremonition, premonitionOverlayEnabled, drawOverlayOnCanvas]);
 
   // ==========================================
   // Live Playback Synchronized Loop
@@ -344,6 +421,8 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
     }
     const newSid = `live_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     setLiveSessionId(newSid);
+    setLivePremonition(null);
+    setLiveRiderSafety(null);
     setLiveProcessedFrames(0);
     setLiveSkippedFrames(0);
     setLiveLatencyMs(null);
@@ -463,6 +542,9 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
                   session_id: liveSessionId,
                   cordon_y: cordonY,
                   confidence_threshold: confidenceThreshold,
+                  source_aspect_ratio:
+                    video.videoWidth > 0 && video.videoHeight > 0 ? video.videoWidth / video.videoHeight : undefined,
+                  permitted_direction: permittedDirection === 'none' ? undefined : permittedDirection,
                 }
               );
 
@@ -484,6 +566,8 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
               setLiveSummarySaved(false);
 
               const dets = result.detected_objects || [];
+              setLivePremonition(result.premonition ?? null);
+              setLiveRiderSafety(result.rider_safety ?? null);
               setLiveDetections(dets);
               if (dets.length > 0) {
                 setInspectedObject(dets[0]);
@@ -527,6 +611,7 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
     enableTracking,
     cordonY,
     confidenceThreshold,
+    permittedDirection,
   ]);
 
   // ==========================================
@@ -585,6 +670,15 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
       if (ctx) ctx.clearRect(0, 0, liveOverlayCanvasRef.current.width, liveOverlayCanvasRef.current.height);
     }
     setLiveDetections([]);
+  };
+
+  // "Why this warning?" → pause on the evidence moment using the existing playback controls
+  const handleInspectPremonitionMoment = (timestampSec: number) => {
+    const video = videoPlayerRef.current;
+    if (!video) return;
+    video.pause();
+    setIsVideoPlaying(false);
+    handleSeek(Math.max(0, Math.min(timestampSec, Number.isFinite(video.duration) ? video.duration : timestampSec)));
   };
 
   const handleReset = () => {
@@ -1255,7 +1349,7 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
                             <button
                               type="button"
                               onClick={startLiveDetection}
-                              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold font-mono shadow-xs flex items-center gap-2 transition-all"
+                              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 text-white text-xs font-semibold shadow-xs flex items-center gap-2 transition-colors"
                             >
                               <Play className="h-4 w-4" />
                               <span>Start Live Detection</span>
@@ -1406,12 +1500,29 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
                     )}
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-[10px] font-mono text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                    <span>Single-Flight Backpressure: ACTIVE</span>
-                    <span className="text-emerald-600 dark:text-emerald-400">Zero Frame Lag</span>
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                    Single-flight inference: frames are skipped, not queued, while a request is in progress.
                   </div>
                 </div>
               </div>
+
+              {/* Traffic Premonition: trajectory risk estimate + evidence reveal */}
+              <TrafficPremonitionPanel
+                enabled={premonitionOverlayEnabled}
+                onToggle={setPremonitionOverlayEnabled}
+                result={livePremonition}
+                isLiveActive={isLiveDetectionActive}
+                onInspectMoment={handleInspectPremonitionMoment}
+              />
+
+              {/* Rider Safety: triple riding and wrong-side candidates for review */}
+              <RiderSafetyPanel
+                result={liveRiderSafety}
+                isLiveActive={isLiveDetectionActive}
+                permittedDirection={permittedDirection}
+                onChangeDirection={setPermittedDirection}
+                onInspectMoment={handleInspectPremonitionMoment}
+              />
             </div>
           )}
         </div>
@@ -1476,7 +1587,7 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
                     <span className="text-[10px] text-sky-600 dark:text-sky-400 font-bold">BATCH ACTIVE</span>
                   </div>
                   <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-sky-500 to-emerald-400 rounded-full animate-pulse w-3/4" />
+                    <div className="h-full bg-sky-500 rounded-full motion-safe:animate-pulse w-3/4" />
                   </div>
                 </div>
               )}
@@ -1541,7 +1652,7 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
                     type="button"
                     disabled={isAnalyzingFull}
                     onClick={handleRunFullAnalysis}
-                    className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-xs font-bold font-mono shadow-xs flex items-center gap-1.5 transition-all disabled:opacity-50"
+                    className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
                   >
                     <Sparkles className="h-3.5 w-3.5 text-amber-300" />
                     <span>{fullAnalysisResult ? 'Re-Run Batch Pipeline' : 'Execute Batch Pipeline'}</span>
@@ -1748,7 +1859,7 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
                   >
                     {fullAnalysisResult.estimated_congestion_level}
                   </span>
-                  <p className="text-[9px] text-slate-500 dark:text-slate-400">Risk Score: {fullAnalysisResult.collision_risk_score.toFixed(2)}</p>
+                  <p className="text-[9px] text-slate-500 dark:text-slate-400">Based on vehicle count per frame</p>
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-white dark:bg-[#0b1120] border border-slate-200 dark:border-slate-800 space-y-1 shadow-xs">
@@ -1950,6 +2061,64 @@ export const TrafficIntelligenceWorkspace: React.FC<TrafficIntelligenceWorkspace
               </div>
             )}
           </div>
+
+          {/* Saved Traffic Premonition estimates (from live sessions). Never confirmed incidents. */}
+          {fullAnalysisResult?.tracking_summary?.risk_events && fullAnalysisResult.tracking_summary.risk_events.length > 0 && (
+            <div className="p-3.5 rounded-xl bg-white dark:bg-[#0b1120] border border-slate-200 dark:border-slate-800 space-y-2.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <h5 className="text-xs font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                  Traffic Premonition estimates
+                </h5>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400">Predicted, not observed incidents</span>
+              </div>
+              <ul className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                {fullAnalysisResult.tracking_summary.risk_events.map((ev) => (
+                  <li
+                    key={ev.event_id}
+                    className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs"
+                  >
+                    <span className="font-semibold text-slate-900 dark:text-white">
+                      #{ev.track_ids[0]} · #{ev.track_ids[1]}
+                      <span className="ml-2 font-mono font-normal text-slate-500 dark:text-slate-400">
+                        {ev.first_detected_sec.toFixed(2)}–{ev.last_detected_sec.toFixed(2)} s
+                      </span>
+                    </span>
+                    <span className="font-mono text-[11px] text-slate-600 dark:text-slate-300">
+                      closest projected gap {ev.peak.measurements.closest_projected_separation_fh.toFixed(3)} fh
+                      {ev.peak.measurements.time_to_closest_approach_sec !== null &&
+                        ` · ${ev.peak.measurements.time_to_closest_approach_sec.toFixed(2)} s ahead`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Saved Rider Safety candidates (from live sessions). Need review; never auto-filed as incidents. */}
+          {fullAnalysisResult?.tracking_summary?.rider_safety_events && fullAnalysisResult.tracking_summary.rider_safety_events.length > 0 && (
+            <div className="p-3.5 rounded-xl bg-white dark:bg-[#0b1120] border border-slate-200 dark:border-slate-800 space-y-2.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <h5 className="text-xs font-semibold text-slate-900 dark:text-white">Rider safety candidates</h5>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400">Needs review, not offence records</span>
+              </div>
+              <ul className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                {fullAnalysisResult.tracking_summary.rider_safety_events.map((ev) => (
+                  <li
+                    key={ev.event_id}
+                    className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs"
+                  >
+                    <span className="font-semibold text-slate-900 dark:text-white">
+                      {ev.kind === 'TRIPLE_RIDING' ? 'Triple riding' : 'Wrong-side driving'} · #{ev.track_id}
+                    </span>
+                    <span className="font-mono text-[11px] text-slate-600 dark:text-slate-300">
+                      {ev.first_detected_sec.toFixed(2)}–{ev.last_detected_sec.toFixed(2)} s
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Tracking Methodology & Limitations Notice */}
           <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-300 shadow-xs">

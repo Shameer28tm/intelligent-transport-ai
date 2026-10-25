@@ -5,6 +5,7 @@ import { Header } from './components/common/Header';
 import { Sidebar } from './components/common/Sidebar';
 import { IncidentFormModal } from './components/incidents/IncidentFormModal';
 import { VisionUploadModal } from './components/vision/VisionUploadModal';
+import { VoiceAssistantWidget } from './components/voice/VoiceAssistantWidget';
 
 import { OverviewPage } from './pages/OverviewPage';
 import { LiveMapPage } from './pages/LiveMapPage';
@@ -16,12 +17,18 @@ import { TransportPlanningPage } from './pages/TransportPlanningPage';
 import { SustainableMobilityPage } from './pages/SustainableMobilityPage';
 import { AccessibilityPage } from './pages/AccessibilityPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { EmergencyResponsePage } from './pages/EmergencyResponsePage';
+
+export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'degraded';
 
 export const App: React.FC = () => {
   const [activeModule, setActiveModule] = useState<AppModule>('overview');
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [statistics, setStatistics] = useState<IncidentStatistics | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [lastCheckedAt, setLastCheckedAt] = useState<Date | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -49,8 +56,9 @@ export const App: React.FC = () => {
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  // Fetch telemetry and incidents
+  // Fetch telemetry and incidents with explicit connection status
   const loadData = useCallback(async () => {
+    setConnectionStatus((prev) => (prev === 'connected' ? 'connected' : 'connecting'));
     try {
       const [healthData, incidentsData, statsData] = await Promise.allSettled([
         api.getHealth(),
@@ -58,17 +66,40 @@ export const App: React.FC = () => {
         api.getStatistics(),
       ]);
 
+      setLastCheckedAt(new Date());
+
       if (healthData.status === 'fulfilled') {
-        setHealth(healthData.value);
+        const h = healthData.value;
+        setHealth(h);
+        if (h.status === 'healthy' && h.database?.status === 'connected') {
+          setConnectionStatus('connected');
+          setConnectionError(null);
+        } else {
+          setConnectionStatus('degraded');
+          setConnectionError(
+            h.database?.status && h.database.status !== 'connected'
+              ? `Database: ${h.database.status}`
+              : 'System degraded'
+          );
+        }
+      } else {
+        setConnectionStatus('disconnected');
+        const reason = healthData.reason;
+        setConnectionError(
+          reason?.message || 'FastAPI backend unreachable at http://127.0.0.1:8000'
+        );
       }
+
       if (incidentsData.status === 'fulfilled') {
         setIncidents(incidentsData.value.items);
       }
       if (statsData.status === 'fulfilled') {
         setStatistics(statsData.value);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('[App] Telemetry sync error:', err);
+      setConnectionStatus('disconnected');
+      setConnectionError(err?.message || 'Connection failure');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -123,6 +154,9 @@ export const App: React.FC = () => {
         {/* Top Operational Command Bar */}
         <Header
           health={health}
+          connectionStatus={connectionStatus}
+          connectionError={connectionError}
+          lastCheckedAt={lastCheckedAt}
           theme={theme}
           onToggleTheme={toggleTheme}
           onOpenReportModal={() => setIsReportModalOpen(true)}
@@ -167,6 +201,8 @@ export const App: React.FC = () => {
               }}
             />
           )}
+
+          {activeModule === 'emergency' && <EmergencyResponsePage incidents={incidents} />}
 
           {activeModule === 'traffic' && (
             <TrafficManagementPage
@@ -213,6 +249,19 @@ export const App: React.FC = () => {
       <VisionUploadModal
         isOpen={isVisionModalOpen}
         onClose={() => setIsVisionModalOpen(false)}
+      />
+
+      {/* Multilingual Voice Assistant (Tamil / Thanglish / English) */}
+      <VoiceAssistantWidget
+        activeModule={activeModule}
+        onNavigate={setActiveModule}
+        onSelectIncident={(incId) => {
+          const found = incidents.find((i) => i.id === incId);
+          if (found) {
+            setSelectedIncident(found);
+            setActiveModule('overview');
+          }
+        }}
       />
     </div>
   );

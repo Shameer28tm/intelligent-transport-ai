@@ -7,7 +7,26 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6.svg?logo=typescript)](https://www.typescriptlang.org)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-38B2AC.svg?logo=tailwind-css)](https://tailwindcss.com)
 
-A competition-ready, extensible intelligent transport and road safety command center inspired by professional urban mobility analytics platforms (Aimsun, PTV Visum, Iteris, Siemens Mobility). The system combines an enterprise operational dashboard, geographic traffic visualization, road incident lifecycle management, corridor performance analytics, and an extensible road-safety computer vision integration layer.
+A road-safety command center focused on **Tamil Nadu**. In 2024, Tamil Nadu recorded the most road accidents in India (67,526) and the second-most deaths (18,449), plus the most deaths of riders not wearing helmets (7,744) ([MoRTH data via The News Minute](https://www.thenewsminute.com/news/tamil-nadu-had-highest-accidents-and-helmet-related-deaths-in-2024-says-govt-data)). The platform combines camera-based detection and tracking, rider-safety checks, trajectory risk estimates, crash-hotspot analytics and golden-hour emergency support.
+
+---
+
+## 🛡️ Tamil Nadu Road Safety
+
+| Module | What it does | What it is not |
+| :--- | :--- | :--- |
+| **TN Road Safety** (`/api/safety/summary`, `/hotspots`, `/context`) | Clusters stored crash incidents into hotspots (500 m, haversine) and flags clusters that meet the MoRTH-style black-corridor rule (5 serious crashes within 500 m in 3 years). Shows district, severity and IST time-of-day breakdowns, plus cited statewide figures. | Not official crash data: the seeded incidents are **simulated demo data**. District assignment uses the nearest HQ city, not official boundaries. |
+| **Emergency Response** (`/api/safety/facilities`) | For an active crash, shows the golden-hour clock, the 5 nearest government medical college hospitals (straight-line distance), one-tap 108/112 calls and Google Maps road directions. Explains the IK:NK-48 cashless trauma scheme with its source. | Hospital locations are city-level approximations to verify; this is not a dispatch system. |
+| **Rider Safety** (live camera) | Flags **triple riding** (3+ person boxes on one tracked motorcycle for 3+ frames) and **wrong-side driving** (sustained motion against the permitted direction configured per camera). Each flag carries evidence and a "Pause at" seek. | **Helmet use is not checked:** the bundled COCO model has no helmet class. Flags are candidates for human review, not offence records. |
+| **Traffic Premonition** | Now also covers **vehicle–pedestrian** conflicts. Riders on two-wheelers are excluded so they aren't counted as pedestrians. | Image-plane estimate, not a collision prediction. |
+
+The map defaults to a statewide Tamil Nadu view, with presets for Chennai, Coimbatore, Madurai, Trichy and NH-45 Vikravandi. Live TomTom incidents load only for city or corridor presets, because TomTom limits the query area.
+
+**Refresh demo data on an existing database.** This deletes only `is_simulated=True` rows; real records are never touched:
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m app.seed --replace-demo
+```
 
 ---
 
@@ -36,7 +55,7 @@ intelligent-transport-ai/
 │   │   ├── seed.py                    # Seeder for realistic urban transport incidents
 │   │   └── main.py                    # FastAPI application entrypoint with CORS & lifespan
 │   ├── alembic/                       # Alembic migrations (PostgreSQL production schema)
-│   ├── tests/                         # Pytest test suite (40 automated tests)
+│   ├── tests/                         # Pytest test suite (67 automated tests)
 │   ├── requirements.txt               # Backend dependencies
 │   ├── pytest.ini                     # Pytest configuration
 │   └── .env.example                   # Backend environment variables template
@@ -95,15 +114,15 @@ python -m venv backend\.venv
 # Install backend dependencies
 .\backend\.venv\Scripts\pip.exe install -r backend\requirements.txt
 
-# (Optional) Download genuine pretrained YOLOv8n ONNX model weights (~12.85 MB)
-.\backend\.venv\Scripts\python.exe backend/app/services/vision/download_weights.py
+# (Optional) Verify or download genuine pretrained YOLOv8n ONNX weights & demo assets (~12.85 MB, Ultralytics AGPL-3.0)
+.\backend\.venv\Scripts\python.exe backend/app/services/vision/setup_assets.py
 
-# Run database migrations (applies schema up to head on configured database)
+# Run database migrations (applies schema up to head on configured database; defaults to local SQLite)
 cd backend
 .\.venv\Scripts\alembic.exe upgrade head
 cd ..
 
-# Run backend automated test suite (40 tests)
+# Run backend automated test suite (67 tests)
 cd backend
 .\.venv\Scripts\pytest.exe tests -v
 cd ..
@@ -154,17 +173,18 @@ Execute all automated tests via pytest:
 cd backend
 .\.venv\Scripts\pytest.exe tests -v
 ```
-**Test Results: 40 Passed, 0 Failed, 0 Skipped (100% Pass Rate)**
+**Test Results: 67 Passed, 0 Failed, 0 Skipped (100% Pass Rate)**
 - `test_root_endpoint`: Verifies API root metadata and provenance flag.
-- `test_health_endpoint`: Verifies database latency, health status, and hardware detection.
+- `test_health_endpoint`: Verifies database latency, health status, bounded timeout handling (`test_health_degraded_when_database_unreachable`), and dynamic hardware detection.
 - `test_database_migration`: Tests URL normalization, dialect isolation, and Alembic migrations.
 - `test_postgres_connectivity`: Validates real PostgreSQL connectivity, `SELECT 1`, and isolated CRUD lifecycle.
 - `test_session_persistence_idempotency`: Validates repeat requests idempotency, multi-thread concurrency safety, and history deduplication.
 - `test_incidents`: Tests incident listing, severity/category filtering, spatial bounding box queries, detail retrieval, and status updates.
 - `test_statistics`: Validates KPI aggregations and hourly trend histograms.
 - `test_mappls`: Verifies status, geocode, and routing endpoints with OAuth error handling.
-- `test_vision`: Tests format validation, demo simulator, and real neural vision inference.
+- `test_vision`: Tests format validation, demo simulator, genuine neural vision inference, and regression tests (`test_video_analysis_fails_gracefully_when_ffmpeg_missing`, `test_video_analysis_fails_gracefully_when_ffprobe_missing`) ensuring 503 errors and zero fabricated records on missing decoders.
 - `test_vision_p3`: Tests IoU box calculation, multi-object IoU tracker association, cordon crossing events, ground truth evaluation, and live frame streaming.
+- `test_risk_estimator`: Validates constant-velocity trajectory projections, conflict reason codes, boundary approach handling, backward seek interruption, tracker integration, and end-to-end premonition payload delivery.
 
 ### Frontend Verification
 ```powershell
@@ -234,6 +254,22 @@ class BaseVisionService(ABC):
     4. *Vehicle Tracking & Events*: Multi-object IoU trajectory tracking and virtual cordon event stream.
     5. *Model Evaluation*: IoU benchmark evaluation against ground-truth datasets.
     6. *Analysis History*: Persistent SQLite history inspection and replay.
+
+---
+
+## 🔮 Traffic Premonition (Trajectory Risk Estimate — Prototype)
+
+Live Playback Detection now estimates potential vehicle conflicts from the **existing tracker output** (same YOLOv8n detections and track IDs; no second inference pass).
+
+- **Engine:** `backend/app/services/vision/risk_estimator.py`. It is deterministic and pure Python, with a constant-velocity least-squares fit over a rolling window of at most 12 observations within 2.5 s. It projects 1.5 s ahead and computes the closest projected separation and the time to closest approach for nearby vehicle pairs.
+- **States:** `MONITORING`, `NO_CONFLICT_DETECTED`, `POTENTIAL_CONFLICT`, `INSUFFICIENT_EVIDENCE`. The engine needs at least 4 observations spanning 0.5 s, plus consistent motion, before it projects anything.
+- **Explainability:** every estimate carries reason codes, measurements and per-track data quality. The UI's **"Why this warning?"** shows the observed path (solid) and the projected path (dashed), the measurements against their thresholds, the timestamp (with a "Pause at" seek), and the limitations.
+- **Lifecycle:** one event per vehicle pair while the interaction lasts. A backwards seek clears trajectories and marks open events `INTERRUPTED`, and Reset Session clears everything. Saved live sessions keep estimates under `tracking_summary.risk_events`, labelled as predictions. Nothing is written to incident history.
+- **Fallback:** untick **Show trajectory overlay** to return to the original detection view. Detection, tracking, Save and History are unchanged.
+
+**Limitations (also shown in the UI):** this is an image-plane estimate. Distances are in *fh* (fraction of frame height), not metres, and times are video seconds under a straight-line projection, not a calibrated time-to-collision. Perspective, turning, braking, occlusion and tracker ID switches are not modelled. This is not a probability or a guarantee of a collision, and it has not been validated against labelled real-world conflicts.
+
+Tests: `backend/tests/test_risk_estimator.py` (synthetic trajectories only).
 
 ---
 

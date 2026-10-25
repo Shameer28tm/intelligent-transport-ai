@@ -3,5 +3,9 @@ from app.api.incidents import router as incidents_router
 from app.api.statistics import router as statistics_router
 from app.api.vision import router as vision_router
 from app.api.mappls import router as mappls_router
+from app.api.tomtom import router as tomtom_router
+from app.api.safety import router as safety_router
+from app.api.voice import router as voice_router
 
-__all__ = ["health_router", "incidents_router", "statistics_router", "vision_router", "mappls_router"]
+__all__ = ["health_router", "incidents_router", "statistics_router", "vision_router", "mappls_router", "tomtom_router", "safety_router", "voice_router"]
+

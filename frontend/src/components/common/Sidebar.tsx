@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   ShieldAlert,
+  Siren,
   TrafficCone,
   FileSearch,
   GitFork,
@@ -9,9 +10,7 @@ import {
   Settings,
   Flame,
   X,
-  Compass,
   Video,
-  Sparkles,
   Map,
 } from 'lucide-react';
 import { AppModule } from '../../types';
@@ -47,12 +46,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'traffic-intelligence',
       label: 'Traffic Intelligence',
       icon: <Video className="h-4 w-4" />,
-      badge: (
-        <span className="flex items-center gap-1 rounded bg-sky-950/80 px-1.5 py-0.5 text-[9px] font-bold text-sky-300 border border-sky-800/50">
-          <Sparkles className="h-2.5 w-2.5 text-sky-400" />
-          P3
-        </span>
-      ),
+    },
+    {
+      id: 'safety',
+      label: 'TN Road Safety',
+      icon: <ShieldAlert className="h-4 w-4" />,
+    },
+    {
+      id: 'emergency',
+      label: 'Emergency Response',
+      icon: <Siren className="h-4 w-4" />,
     },
     {
       id: 'explorer',
@@ -75,11 +78,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Secondary Operations Modules (Preserved Features)
   const secondaryNavItems: { id: AppModule; label: string; icon: React.ReactNode }[] = [
-    {
-      id: 'safety',
-      label: 'Road Safety',
-      icon: <ShieldAlert className="h-4 w-4" />,
-    },
     {
       id: 'traffic',
       label: 'Traffic Corridors',
@@ -171,7 +169,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Additional Modules */}
             <div>
               <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-slate-400 dark:text-slate-500 uppercase font-mono">
-                Transport Planning & Corridors
+                Illustrative concepts (not TN data)
               </div>
               <nav className="mt-1 space-y-0.5">
                 {secondaryNavItems.map((item) => {
@@ -202,24 +200,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Footer: Telemetry & Spatial Source */}
-        <div className="space-y-2 pt-3 border-t border-slate-200 dark:border-slate-800/80">
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/50 p-3 text-xs">
-            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px]">
-              <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-medium">
-                <Compass className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
-                <span>Spatial Engine</span>
-              </span>
-              <span className="text-sky-700 dark:text-sky-300 font-mono text-[10px]">MapLibre + Mappls</span>
-            </div>
-            <div className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-sky-500 to-emerald-500 w-full rounded-full" />
-            </div>
-            <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
-              Spatial layers synced with real-time SQLite records & Mappls fallback.
-            </p>
-          </div>
-        </div>
       </aside>
     </>
   );

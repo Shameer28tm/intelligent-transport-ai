@@ -13,8 +13,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   Lock,
+  Activity,
 } from 'lucide-react';
-import { SystemHealth, MapplsStatus } from '../types';
+import { SystemHealth, MapplsStatus, TomTomStatus } from '../types';
 import { api } from '../services/api';
 
 interface SettingsPageProps {
@@ -30,6 +31,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 }) => {
   const [mapplsStatus, setMapplsStatus] = useState<MapplsStatus | null>(null);
   const [isLoadingMappls, setIsLoadingMappls] = useState(false);
+  const [tomtomStatus, setTomTomStatus] = useState<TomTomStatus | null>(null);
+  const [isLoadingTomTom, setIsLoadingTomTom] = useState(false);
 
   const checkMappls = () => {
     setIsLoadingMappls(true);
@@ -39,13 +42,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       .finally(() => setIsLoadingMappls(false));
   };
 
+  const checkTomTom = () => {
+    setIsLoadingTomTom(true);
+    api.getTomTomStatus()
+      .then((res) => setTomTomStatus(res))
+      .catch((err) => console.warn('[SettingsPage] TomTom check error:', err))
+      .finally(() => setIsLoadingTomTom(false));
+  };
+
   useEffect(() => {
     checkMappls();
+    checkTomTom();
   }, []);
 
   const handleFullRefresh = () => {
     onRefresh();
     checkMappls();
+    checkTomTom();
   };
 
   const runtimeProvider =
@@ -70,10 +83,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         <button
           type="button"
           onClick={handleFullRefresh}
-          disabled={isRefreshing || isLoadingMappls}
+          disabled={isRefreshing || isLoadingMappls || isLoadingTomTom}
           className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:text-white transition-colors shadow-xs"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing || isLoadingMappls ? 'animate-spin text-sky-600 dark:text-sky-400' : ''}`} />
+          <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing || isLoadingMappls || isLoadingTomTom ? 'animate-spin text-sky-600 dark:text-sky-400' : ''}`} />
           <span>Ping System Status</span>
         </button>
       </div>
@@ -136,25 +149,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 CPUExecutionProvider
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600 dark:text-slate-400">Physical Host Device:</span>
-              <span className="text-slate-900 dark:text-white font-mono text-[11px] truncate max-w-[160px]">
-                {hostGpu || 'Host GPU Available'}
-              </span>
-            </div>
+            {hostGpu && (
+              <div className="flex justify-between">
+                <span className="text-slate-600 dark:text-slate-400">Detected GPU (not used for inference):</span>
+                <span className="text-slate-900 dark:text-white font-mono text-[11px] truncate max-w-[160px]">{hostGpu}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-slate-600 dark:text-slate-400">Vision Architecture:</span>
               <span className="text-sky-700 dark:text-sky-300 font-mono">YOLOv8n ONNX (Pretrained)</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600 dark:text-slate-400">Intra-op Threads:</span>
-              <span className="text-slate-900 dark:text-white font-mono">4 Cores Optimized</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600 dark:text-slate-400">GPU Acceleration:</span>
-              <span className="text-amber-600 dark:text-amber-400 font-mono text-[11px]">
-                Driver Ready • CPU Active
-              </span>
             </div>
           </div>
         </div>
@@ -180,9 +183,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     : 'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                 }`}
               >
-                {mapplsStatus?.status === 'AUTH_FAILED'
-                  ? 'HTTP 401 (Bad Credentials)'
-                  : mapplsStatus?.status || 'Auditing...'}
+                {isLoadingMappls
+                  ? 'Checking'
+                  : mapplsStatus?.is_operational
+                  ? 'Authenticated'
+                  : mapplsStatus?.status === 'AUTH_FAILED'
+                  ? 'Invalid credentials (HTTP 401)'
+                  : mapplsStatus?.status === 'NOT_CONFIGURED'
+                  ? 'Not configured'
+                  : mapplsStatus?.status === 'SERVICE_UNAVAILABLE'
+                  ? 'Network error'
+                  : 'Not configured'}
               </span>
             </div>
             <div className="flex justify-between items-center">
@@ -200,6 +211,63 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             </div>
             <div className="pt-1 text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed border-t border-slate-100 dark:border-slate-800/80">
               {mapplsStatus?.diagnostic_message || 'Mappls server credential audit active.'}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: TomTom Live Traffic Integration Audit */}
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] p-4 space-y-3 shadow-xs">
+          <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800 text-sky-600 dark:text-sky-400">
+            <Activity className="h-4 w-4" />
+            <h3 className="text-xs font-bold text-slate-900 dark:text-white font-mono uppercase">TomTom Traffic Engine</h3>
+          </div>
+
+          <div className="space-y-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-slate-600 dark:text-slate-400">Traffic Provider:</span>
+              <span className="text-slate-900 dark:text-white font-mono">TomTom Telematics</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-600 dark:text-slate-400">API Status:</span>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
+                  tomtomStatus?.is_operational
+                    ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700'
+                    : tomtomStatus?.status === 'AUTH_FAILED'
+                    ? 'bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                    : 'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                }`}
+              >
+                {isLoadingTomTom
+                  ? 'Checking'
+                  : tomtomStatus?.is_operational
+                  ? 'Operational'
+                  : tomtomStatus?.status === 'AUTH_FAILED'
+                  ? 'Unauthorized (HTTP 401)'
+                  : tomtomStatus?.status === 'NOT_CONFIGURED'
+                  ? 'Not configured'
+                  : tomtomStatus?.status === 'RATE_LIMITED'
+                  ? 'Rate limited (HTTP 429)'
+                  : 'Standby'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-600 dark:text-slate-400">Masked Key:</span>
+              <span className="text-slate-700 dark:text-slate-300 font-mono text-[11px] flex items-center gap-1">
+                <Lock className="h-3 w-3 text-slate-400" />
+                {tomtomStatus?.masked_key || 'not_configured'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-600 dark:text-slate-400">Enabled APIs:</span>
+              <span className="text-sky-700 dark:text-sky-300 font-mono text-[11px]">
+                Flow v4 & Incidents v5
+              </span>
+            </div>
+            <div className="pt-1 text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed border-t border-slate-100 dark:border-slate-800/80">
+              {tomtomStatus?.is_operational
+                ? 'Live traffic flow segments and incident feeds verified.'
+                : tomtomStatus?.error || 'Awaiting TomTom API key in backend/.env.'}
             </div>
           </div>
         </div>
@@ -307,6 +375,30 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               <span className="text-slate-900 dark:text-white">/api/mappls/route</span>
             </div>
             <span className="text-slate-500 dark:text-slate-400 text-[11px]">P2 Feature: Mappls Advanced Maps routing proxy</span>
+          </div>
+
+          <div className="py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="rounded bg-sky-50 dark:bg-sky-950 px-2 py-0.5 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 font-bold">GET</span>
+              <span className="text-slate-900 dark:text-white">/api/tomtom/status</span>
+            </div>
+            <span className="text-slate-500 dark:text-slate-400 text-[11px]">TomTom credential validation, rate limit status, and diagnostics</span>
+          </div>
+
+          <div className="py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="rounded bg-sky-50 dark:bg-sky-950 px-2 py-0.5 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 font-bold">GET</span>
+              <span className="text-slate-900 dark:text-white">/api/tomtom/flow</span>
+            </div>
+            <span className="text-slate-500 dark:text-slate-400 text-[11px]">Real-time road segment speeds, delays, and free-flow velocity</span>
+          </div>
+
+          <div className="py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="rounded bg-sky-50 dark:bg-sky-950 px-2 py-0.5 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 font-bold">GET</span>
+              <span className="text-slate-900 dark:text-white">/api/tomtom/incidents</span>
+            </div>
+            <span className="text-slate-500 dark:text-slate-400 text-[11px]">Real-time bounding-box traffic incident cluster telemetry</span>
           </div>
         </div>
       </div>

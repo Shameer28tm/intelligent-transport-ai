@@ -29,16 +29,16 @@ def test_filter_incidents_by_category(client):
 
 
 def test_bounding_box_filter(client):
-    # Filter within tight San Francisco Downtown bounding box
+    # Filter within a Chennai bounding box (Tamil Nadu demo seed)
     response = client.get(
-        "/api/incidents?min_lat=37.77&max_lat=37.80&min_lng=-122.42&max_lng=-122.38"
+        "/api/incidents?min_lat=12.85&max_lat=13.15&min_lng=80.05&max_lng=80.30"
     )
     assert response.status_code == 200
     data = response.json()
     assert data["total"] >= 1
     for item in data["items"]:
-        assert 37.77 <= item["latitude"] <= 37.80
-        assert -122.42 <= item["longitude"] <= -122.38
+        assert 12.85 <= item["latitude"] <= 13.15
+        assert 80.05 <= item["longitude"] <= 80.30
 
 
 def test_create_incident_valid(client):

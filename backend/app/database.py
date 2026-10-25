@@ -43,13 +43,14 @@ def create_app_engine(database_url: str):
     if is_sqlite:
         return create_engine(
             norm_url,
-            connect_args={"check_same_thread": False},
+            connect_args={"check_same_thread": False, "timeout": 10},
             echo=False,
             future=True,
         )
     elif is_postgres:
         return create_engine(
             norm_url,
+            connect_args={"connect_timeout": 5},
             pool_pre_ping=True,      # Vital for Neon serverless idle connection recovery
             pool_recycle=300,        # Recycle idle connections every 5 minutes
             pool_size=5,
@@ -96,7 +97,7 @@ def get_db_info(raw_url: str | None = None) -> Dict[str, Any]:
         "dialect": "postgresql",
         "is_postgres": True,
         "is_neon": is_neon,
-        "engine": f"Neon PostgreSQL ({parsed.hostname})" if is_neon else "PostgreSQL Server",
+        "engine": "Neon PostgreSQL (Serverless)" if is_neon else "PostgreSQL Server",
     }
 
 

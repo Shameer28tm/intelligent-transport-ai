@@ -1,5 +1,12 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import * as maplibregl from 'maplibre-gl';
+import maplibreglWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+
+// Configure MapLibre GL worker URL for Vite bundling
+if (typeof window !== 'undefined' && (maplibregl as any).config) {
+  (maplibregl as any).config.WORKER_URL = maplibreglWorkerUrl;
+}
+
 import {
   RotateCcw,
   Layers,
@@ -15,8 +22,12 @@ import {
   X,
   ExternalLink,
   ShieldAlert,
+  ShieldCheck,
+  RefreshCw,
+  Lock,
+  Activity,
 } from 'lucide-react';
-import { Incident, IncidentSeverity, MapplsStatus } from '../../types';
+import { Incident, IncidentSeverity, MapplsStatus, TomTomStatus, TomTomFlowResponse } from '../../types';
 import { MapLegend } from './MapLegend';
 import { IncidentDetailPanel } from './IncidentDetailPanel';
 import { api } from '../../services/api';
@@ -31,8 +42,71 @@ interface TransportMapProps {
 
 export type BasemapProvider = 'mappls' | 'light-canvas' | 'dark-canvas' | 'openfreemap' | 'osm' | 'carto';
 
-const DEFAULT_CENTER: [number, number] = [-122.4194, 37.7749];
-const DEFAULT_ZOOM = 12.2;
+export interface RegionPreset {
+  id: string;
+  label: string;
+  shortLabel: string;
+  center: [number, number];
+  zoom: number;
+  bbox: [number, number, number, number];
+  /** TomTom incident queries are limited to small areas; statewide views skip live data. */
+  liveTrafficSupported?: boolean;
+}
+
+export const REGION_PRESETS: RegionPreset[] = [
+  {
+    id: 'tn',
+    label: 'Tamil Nadu (statewide)',
+    shortLabel: 'Tamil Nadu',
+    center: [78.6569, 11.1271],
+    zoom: 6.4,
+    bbox: [76.2, 8.0, 80.4, 13.6],
+    liveTrafficSupported: false,
+  },
+  {
+    id: 'chennai',
+    label: 'Chennai, Tamil Nadu',
+    shortLabel: 'Chennai TN',
+    center: [80.2500, 13.0400],
+    zoom: 12.0,
+    bbox: [80.12, 12.92, 80.32, 13.18],
+  },
+  {
+    id: 'coimbatore',
+    label: 'Coimbatore, Tamil Nadu',
+    shortLabel: 'Coimbatore TN',
+    center: [76.9558, 11.0168],
+    zoom: 12.5,
+    bbox: [76.85, 10.92, 77.08, 11.08],
+  },
+  {
+    id: 'vikravandi',
+    label: 'NH-45 Vikravandi, Viluppuram',
+    shortLabel: 'NH-45 Vikravandi',
+    center: [79.5466, 12.0379],
+    zoom: 13.5,
+    bbox: [79.45, 11.95, 79.65, 12.12],
+  },
+  {
+    id: 'madurai',
+    label: 'Madurai, Tamil Nadu',
+    shortLabel: 'Madurai TN',
+    center: [78.1198, 9.9252],
+    zoom: 12.5,
+    bbox: [78.03, 9.85, 78.22, 10.0],
+  },
+  {
+    id: 'trichy',
+    label: 'Tiruchirappalli, Tamil Nadu',
+    shortLabel: 'Trichy TN',
+    center: [78.7047, 10.7905],
+    zoom: 12.5,
+    bbox: [78.6, 10.72, 78.8, 10.88],
+  },
+];
+
+const DEFAULT_CENTER: [number, number] = REGION_PRESETS[0].center;
+const DEFAULT_ZOOM = REGION_PRESETS[0].zoom;
 
 // 1. Esri World Light Gray Canvas (100% Keyless, zero watermark, clean light theme)
 const ESRI_LIGHT_STYLE: maplibregl.StyleSpecification = {
@@ -215,6 +289,9 @@ export const TransportMap: React.FC<TransportMapProps> = ({
 
   // Map state
   const [activeSeverityFilter, setActiveSeverityFilter] = useState<string>('ALL');
+  const [provenanceFilter, setProvenanceFilter] = useState<'ALL' | 'LIVE' | 'SIMULATED'>('ALL');
+  const [selectedRegionId, setSelectedRegionId] = useState<string>('tn');
+  const [isRegionMenuOpen, setIsRegionMenuOpen] = useState(false);
   const [showCongestionLayer, setShowCongestionLayer] = useState(true);
   const [showCorridorLayer, setShowCorridorLayer] = useState(true);
   const isDarkInitial = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
@@ -228,6 +305,21 @@ export const TransportMap: React.FC<TransportMapProps> = ({
   const [mapplsStatus, setMapplsStatus] = useState<MapplsStatus | null>(null);
   const [isCheckingMappls, setIsCheckingMappls] = useState(false);
   const [mapplsBannerNotice, setMapplsBannerNotice] = useState<string | null>(null);
+  const [isMapplsDiagOpen, setIsMapplsDiagOpen] = useState(false);
+
+  // TomTom Traffic API Integration State
+  const [tomtomStatus, setTomTomStatus] = useState<TomTomStatus | null>(null);
+  const [isCheckingTomTom, setIsCheckingTomTom] = useState(false);
+  const [tomtomIncidents, setTomTomIncidents] = useState<Incident[]>([]);
+  const [isTomTomDiagOpen, setIsTomTomDiagOpen] = useState(false);
+  const [selectedFlowData, setSelectedFlowData] = useState<TomTomFlowResponse | null>(null);
+  const [isFlowLoading, setIsFlowLoading] = useState(false);
+  const [showTomTomLiveIncidents, setShowTomTomLiveIncidents] = useState(true);
+
+  const tomtomStatusRef = useRef<TomTomStatus | null>(tomtomStatus);
+  useEffect(() => {
+    tomtomStatusRef.current = tomtomStatus;
+  }, [tomtomStatus]);
 
   // Mappls Place Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -238,20 +330,13 @@ export const TransportMap: React.FC<TransportMapProps> = ({
 
   const cartoApiKey = import.meta.env.VITE_CARTO_API_KEY as string | undefined;
 
-  // Audit Mappls status on mount
-  useEffect(() => {
+  const refreshMapplsStatus = useCallback(() => {
     setIsCheckingMappls(true);
     api.getMapplsStatus()
       .then((status) => {
         setMapplsStatus(status);
-        if (!status.is_operational) {
-          // If Mappls is selected or attempted, notice user of fallback
-          if (status.status === 'AUTH_FAILED') {
-            setMapplsBannerNotice(
-              `Mappls Service Notice: Server credentials rejected with HTTP 401 (Bad client credentials). Fallback basemap (Esri Canvas) is active.`
-            );
-          }
-        }
+        // Do not display intrusive automatic popup banner on every load;
+        // provider status is accessible cleanly via toolbar button and diagnostics modal.
       })
       .catch((err) => {
         console.warn('[TransportMap] Mappls status inquiry failed:', err);
@@ -261,11 +346,82 @@ export const TransportMap: React.FC<TransportMapProps> = ({
       });
   }, []);
 
-  // Filter incidents according to active severity filter
+  const refreshTomTomStatus = useCallback((forceRefresh: boolean = false, regionId: string = selectedRegionId) => {
+    setIsCheckingTomTom(true);
+    const preset = REGION_PRESETS.find((r) => r.id === regionId) || REGION_PRESETS[0];
+    api.getTomTomStatus(forceRefresh)
+      .then((status) => {
+        setTomTomStatus(status);
+        if (status.is_operational && preset.liveTrafficSupported !== false) {
+          api.getTomTomIncidents(preset.bbox)
+            .then((res) => {
+              if (res.success && Array.isArray(res.incidents)) {
+                setTomTomIncidents(res.incidents);
+              } else {
+                setTomTomIncidents([]);
+              }
+            })
+            .catch((err) => {
+              console.warn('[TransportMap] TomTom incidents query failed:', err);
+              setTomTomIncidents([]);
+            });
+        } else {
+          setTomTomIncidents([]);
+        }
+      })
+      .catch((err) => {
+        console.warn('[TransportMap] TomTom status query failed:', err);
+        setTomTomIncidents([]);
+      })
+      .finally(() => {
+        setIsCheckingTomTom(false);
+      });
+  }, [selectedRegionId]);
+
+  // Handle switching target geographic corridor (e.g., Chennai, Tamil Nadu)
+  const handleSelectRegion = (preset: RegionPreset) => {
+    setSelectedRegionId(preset.id);
+    setIsRegionMenuOpen(false);
+    if (mapRef.current) {
+      mapRef.current.flyTo({
+        center: preset.center,
+        zoom: preset.zoom,
+        pitch: 25,
+        speed: 1.2,
+      });
+    }
+    refreshTomTomStatus(false, preset.id);
+  };
+
+  // Audit provider statuses on mount
+  useEffect(() => {
+    refreshMapplsStatus();
+    refreshTomTomStatus();
+  }, [refreshMapplsStatus, refreshTomTomStatus]);
+
+  // Combined Incidents: Local records + Live TomTom telemetry
+  const allIncidents = useMemo(() => {
+    if (!showTomTomLiveIncidents || !tomtomStatus?.is_operational) {
+      return incidents;
+    }
+    return [...incidents, ...tomtomIncidents];
+  }, [incidents, tomtomIncidents, showTomTomLiveIncidents, tomtomStatus]);
+
+  const liveCount = useMemo(() => allIncidents.filter((inc) => !inc.is_simulated).length, [allIncidents]);
+  const simCount = useMemo(() => allIncidents.filter((inc) => inc.is_simulated).length, [allIncidents]);
+
+  // Filter incidents according to active severity filter AND provenance filter
   const filteredIncidents = useMemo(() => {
-    if (activeSeverityFilter === 'ALL') return incidents;
-    return incidents.filter((inc) => inc.severity === activeSeverityFilter);
-  }, [incidents, activeSeverityFilter]);
+    let list = allIncidents;
+    if (provenanceFilter === 'LIVE') {
+      list = list.filter((inc) => !inc.is_simulated);
+    } else if (provenanceFilter === 'SIMULATED') {
+      list = list.filter((inc) => inc.is_simulated);
+    }
+
+    if (activeSeverityFilter === 'ALL') return list;
+    return list.filter((inc) => inc.severity === activeSeverityFilter);
+  }, [allIncidents, activeSeverityFilter, provenanceFilter]);
 
   // Resolve style based on selected basemap provider
   const getStyleForProvider = useCallback(
@@ -339,12 +495,28 @@ export const TransportMap: React.FC<TransportMapProps> = ({
         });
       });
 
+      map.on('click', async (e: any) => {
+        if (tomtomStatusRef.current?.is_operational) {
+          setIsFlowLoading(true);
+          try {
+            const flow = await api.getTomTomFlow(e.lngLat.lat, e.lngLat.lng);
+            if (flow.success) {
+              setSelectedFlowData(flow);
+            }
+          } catch (err) {
+            console.warn('[TransportMap] Flow query on click failed:', err);
+          } finally {
+            setIsFlowLoading(false);
+          }
+        }
+      });
+
       map.on('error', (e: any) => {
         console.warn('[TransportMap] Tile or resource warning:', e);
         const msg = e.error?.message || e.message || '';
         if (msg.includes('401') || msg.includes('403') || msg.includes('fetch') || msg.includes('network')) {
           setTileError(
-            'Basemap tile connection issue. Incident markers and spatial telemetry remain 100% operational.'
+            'Basemap tiles could not load. Incident markers and filters still work on the fallback grid.'
           );
         }
       });
@@ -430,16 +602,18 @@ export const TransportMap: React.FC<TransportMapProps> = ({
       };
 
       const cfg = colorMap[incident.severity] || colorMap.MEDIUM;
+      const isLive = !incident.is_simulated;
 
       el.innerHTML = `
         <div class="relative flex items-center justify-center">
           <div class="w-7 h-7 rounded-full ${cfg.bg} ${cfg.border} ${cfg.glow} ${cfg.text} flex items-center justify-center font-bold text-[10px] shadow-lg transition-transform hover:scale-125 ${
             isSelected ? 'scale-125 ring-8 ring-sky-400' : ''
           }">
-            !
+            ${isLive ? '⚡' : '!'}
           </div>
+          ${isLive ? '<span class="absolute -top-1 -right-1 flex h-2.5 w-2.5 pointer-events-none"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span></span>' : ''}
           <div class="absolute -top-7 hidden group-hover:flex items-center rounded bg-slate-900/95 text-white text-[10px] px-2 py-0.5 border border-slate-700 whitespace-nowrap shadow-md pointer-events-none z-30">
-            ${incident.location_name}
+            ${isLive ? '[LIVE] ' : '[SIM] '}${incident.location_name}
           </div>
         </div>
       `;
@@ -468,9 +642,10 @@ export const TransportMap: React.FC<TransportMapProps> = ({
 
   const handleRecenter = () => {
     if (mapRef.current) {
+      const preset = REGION_PRESETS.find((r) => r.id === selectedRegionId) || REGION_PRESETS[0];
       mapRef.current.flyTo({
-        center: DEFAULT_CENTER,
-        zoom: DEFAULT_ZOOM,
+        center: preset.center,
+        zoom: preset.zoom,
         pitch: 25,
         speed: 1.2,
       });
@@ -555,7 +730,15 @@ export const TransportMap: React.FC<TransportMapProps> = ({
     {
       id: 'mappls',
       label: 'Mappls Enterprise Map',
-      badge: mapplsStatus?.is_operational ? 'Connected' : 'Auth Required (401)',
+      badge: isCheckingMappls
+        ? 'Checking...'
+        : mapplsStatus?.is_operational
+        ? 'Authenticated · India Vector'
+        : mapplsStatus?.status === 'AUTH_FAILED'
+        ? 'Invalid Credentials · Esri Fallback'
+        : mapplsStatus?.status === 'NOT_CONFIGURED'
+        ? 'Not Configured · Esri Fallback'
+        : 'Esri Fallback Active',
       isKeyless: false,
     },
     {
@@ -584,14 +767,91 @@ export const TransportMap: React.FC<TransportMapProps> = ({
       <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
         {/* Left Toolbar Items */}
         <div className="flex flex-wrap items-center gap-2 pointer-events-auto">
-          {/* Severity filter pills */}
+          {/* Target Region Selector */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsRegionMenuOpen(!isRegionMenuOpen)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0b1120]/95 backdrop-blur-md px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-slate-700 transition-colors shadow-xs dark:shadow-lg"
+              title="Switch Target Traffic Corridor"
+            >
+              <Compass className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+              <span className="font-semibold text-slate-900 dark:text-white">
+                {REGION_PRESETS.find((r) => r.id === selectedRegionId)?.shortLabel || 'Corridor'}
+              </span>
+              <ChevronDown className="h-3 w-3 text-slate-400 ml-0.5" />
+            </button>
+
+            {isRegionMenuOpen && (
+              <div className="absolute left-0 mt-1 w-56 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] backdrop-blur-md p-1.5 shadow-xl z-30 space-y-1">
+                <div className="px-2 py-1 text-[10px] font-mono uppercase text-slate-400 tracking-wider">
+                  Target Traffic Corridors:
+                </div>
+                {REGION_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => handleSelectRegion(preset)}
+                    className={`w-full flex items-center justify-between rounded-lg px-2.5 py-2 text-xs transition-colors ${
+                      selectedRegionId === preset.id
+                        ? 'bg-sky-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 font-semibold border border-sky-200 dark:border-sky-500/30'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span>{preset.label}</span>
+                    {selectedRegionId === preset.id && <Check className="h-4 w-4 text-sky-600 dark:text-sky-400 shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Provenance Filter Pills */}
           <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0b1120]/95 backdrop-blur-md p-1 shadow-xs dark:shadow-lg">
+            <button
+              type="button"
+              onClick={() => setProvenanceFilter('ALL')}
+              className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide transition-all ${
+                provenanceFilter === 'ALL'
+                  ? 'bg-slate-800 dark:bg-slate-700 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              All ({allIncidents.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setProvenanceFilter('LIVE')}
+              className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold tracking-wide transition-all ${
+                provenanceFilter === 'LIVE'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300'
+              }`}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live ({liveCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setProvenanceFilter('SIMULATED')}
+              className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide transition-all ${
+                provenanceFilter === 'SIMULATED'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300'
+              }`}
+            >
+              Sim ({simCount})
+            </button>
+          </div>
+
+          {/* Severity filter pills */}
+          <div className="hidden lg:flex items-center rounded-lg border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0b1120]/95 backdrop-blur-md p-1 shadow-xs dark:shadow-lg">
             {(['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const).map((sev) => (
               <button
                 key={sev}
                 type="button"
                 onClick={() => setActiveSeverityFilter(sev)}
-                className={`rounded-md px-2.5 py-1 text-xs font-semibold tracking-wide transition-all ${
+                className={`rounded-md px-2 py-1 text-xs font-semibold tracking-wide transition-all ${
                   activeSeverityFilter === sev
                     ? 'bg-sky-600 text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -691,6 +951,63 @@ export const TransportMap: React.FC<TransportMapProps> = ({
           >
             <RotateCcw className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Reset</span>
+          </button>
+
+          {/* TomTom Live Traffic Diagnostics & Status Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsTomTomDiagOpen(true)}
+            className={`flex items-center gap-1.5 rounded-lg border backdrop-blur-md px-2.5 py-1 text-xs font-medium transition-colors shadow-xs ${
+              tomtomStatus?.is_operational
+                ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/95 dark:bg-emerald-950/90 text-emerald-800 dark:text-emerald-300'
+                : 'border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0b1120]/95 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+            }`}
+            title="View TomTom Traffic Flow & Incidents Status"
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                tomtomStatus?.is_operational
+                  ? 'bg-emerald-500 animate-pulse'
+                  : tomtomStatus?.status === 'AUTH_FAILED'
+                  ? 'bg-rose-500'
+                  : tomtomStatus?.status === 'NOT_CONFIGURED'
+                  ? 'bg-amber-400'
+                  : 'bg-slate-400'
+              }`}
+            />
+            <span className="font-mono text-[11px] hidden sm:inline">
+              {isCheckingTomTom
+                ? 'TomTom: Checking'
+                : tomtomStatus?.is_operational
+                ? `TomTom Live (${tomtomIncidents.length})`
+                : tomtomStatus?.status === 'AUTH_FAILED'
+                ? 'TomTom: 401 (Fallback)'
+                : tomtomStatus?.status === 'NOT_CONFIGURED'
+                ? 'TomTom: Standby'
+                : 'TomTom: Fallback'}
+            </span>
+            <Info className="h-3 w-3 text-slate-400" />
+          </button>
+
+          {/* Mappls Provider Diagnostics Trigger (Legacy) */}
+          <button
+            type="button"
+            onClick={() => setIsMapplsDiagOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0b1120]/95 backdrop-blur-md px-2 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors shadow-xs"
+            title="View Mappls Authentication Diagnostics"
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                mapplsStatus?.is_operational
+                  ? 'bg-emerald-500'
+                  : mapplsStatus?.status === 'AUTH_FAILED'
+                  ? 'bg-amber-500'
+                  : 'bg-slate-400'
+              }`}
+            />
+            <span className="font-mono text-[10px] hidden md:inline">
+              Mappls
+            </span>
           </button>
         </div>
 
@@ -851,6 +1168,270 @@ export const TransportMap: React.FC<TransportMapProps> = ({
         onClose={() => onSelectIncident(null)}
         onUpdateStatus={onUpdateStatus}
       />
+
+      {/* Mappls Geospatial Provider Diagnostics Modal */}
+      {isMapplsDiagOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0c1322] p-5 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <MapIcon className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white font-mono uppercase">
+                  Mappls Geospatial Provider Diagnostics
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMapplsDiagOpen(false)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-800/80">
+                <span className="text-slate-500 dark:text-slate-400">OAuth Authentication Status:</span>
+                <span
+                  className={`font-mono font-semibold px-2 py-0.5 rounded text-[11px] ${
+                    mapplsStatus?.is_operational
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                      : mapplsStatus?.status === 'AUTH_FAILED'
+                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                      : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                  }`}
+                >
+                  {isCheckingMappls
+                    ? 'Checking'
+                    : mapplsStatus?.status === 'AUTH_FAILED'
+                    ? 'Invalid credentials (HTTP 401)'
+                    : mapplsStatus?.status || 'Not configured'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-800/80">
+                <span className="text-slate-500 dark:text-slate-400">Active Map Rendering Layer:</span>
+                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                  {mapplsStatus?.is_operational ? 'Mappls Vector Map' : 'Esri World Gray Canvas (Keyless Public)'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-800/80">
+                <span className="text-slate-500 dark:text-slate-400">Client ID Status:</span>
+                <span className="font-mono text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <Lock className="h-3 w-3 text-slate-400" />
+                  {mapplsStatus?.masked_client_id || 'Configured (masked)'}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed space-y-1">
+                <p className="font-semibold">Diagnostic Summary:</p>
+                <p>
+                  {mapplsStatus?.diagnostic_message ||
+                    'Mappls authentication endpoint returned HTTP 401 (Bad client credentials). The system automatically falls back to Esri Canvas.'}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed space-y-1">
+                <p className="font-semibold text-slate-800 dark:text-slate-200">How to Obtain Valid Credentials:</p>
+                <p>
+                  1. Register an account at <a href="https://www.mappls.com/api/" target="_blank" rel="noreferrer" className="text-sky-600 dark:text-sky-400 underline">mappls.com/api</a>
+                </p>
+                <p>2. Create a project and obtain an authorized OAuth 2.0 Client ID and Client Secret.</p>
+                <p>3. Add <code className="font-mono text-slate-700 dark:text-slate-300">MAPPLS_CLIENT_ID</code> and <code className="font-mono text-slate-700 dark:text-slate-300">MAPPLS_CLIENT_SECRET</code> to your <code className="font-mono">.env.local</code>.</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={refreshMapplsStatus}
+                disabled={isCheckingMappls}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <RefreshCw className={`h-3 w-3 ${isCheckingMappls ? 'animate-spin' : ''}`} />
+                <span>Re-check Mappls Auth</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsMapplsDiagOpen(false)}
+                className="rounded-lg bg-slate-900 dark:bg-slate-800 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 dark:hover:bg-slate-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating TomTom Flow Segment Telemetry Overlay */}
+      {(selectedFlowData || isFlowLoading) && (
+        <div className="absolute bottom-16 left-4 z-20 w-80 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0b1120]/95 backdrop-blur-md p-3.5 shadow-xl text-xs space-y-2 pointer-events-auto">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+            <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400 font-semibold font-mono text-[11px] uppercase">
+              <Activity className={`h-3.5 w-3.5 ${isFlowLoading ? 'animate-spin' : ''}`} />
+              <span>TomTom Live Road Flow</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedFlowData(null);
+                setIsFlowLoading(false);
+              }}
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {isFlowLoading ? (
+            <div className="py-4 text-center text-slate-500 font-mono text-[11px] flex items-center justify-center gap-2">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              <span>Querying TomTom Traffic Flow...</span>
+            </div>
+          ) : selectedFlowData ? (
+            <>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[10px]">Current Speed</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white text-base">
+                    {selectedFlowData.current_speed_kmh} <span className="text-[10px] font-normal text-slate-400">km/h</span>
+                  </span>
+                </div>
+                <div className="p-2 rounded bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[10px]">Free Flow Speed</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white text-base">
+                    {selectedFlowData.free_flow_speed_kmh} <span className="text-[10px] font-normal text-slate-400">km/h</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] pt-1">
+                <span className="text-slate-500 dark:text-slate-400">Congestion Delay:</span>
+                <span className={`font-mono font-semibold ${
+                  (selectedFlowData.congestion_pct || 0) > 50 ? 'text-rose-500' : 'text-emerald-500'
+                }`}>
+                  {selectedFlowData.congestion_pct}% Saturation
+                </span>
+              </div>
+
+              <div className="text-[9px] text-slate-400 font-mono pt-1 border-t border-slate-100 dark:border-slate-800 flex justify-between">
+                <span>Class: {selectedFlowData.functional_road_class || 'FRC'}</span>
+                <span>{selectedFlowData.attribution || '© TomTom'}</span>
+              </div>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {/* TomTom Geospatial Provider Diagnostics Modal */}
+      {isTomTomDiagOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0c1322] p-5 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white font-mono uppercase">
+                  TomTom Traffic API Diagnostics
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTomTomDiagOpen(false)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-800/80">
+                <span className="text-slate-500 dark:text-slate-400">Provider Status:</span>
+                <span
+                  className={`font-mono font-semibold px-2 py-0.5 rounded text-[11px] ${
+                    tomtomStatus?.is_operational
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                      : tomtomStatus?.status === 'AUTH_FAILED'
+                      ? 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                      : tomtomStatus?.status === 'RATE_LIMITED'
+                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                      : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                  }`}
+                >
+                  {isCheckingTomTom
+                    ? 'Checking...'
+                    : tomtomStatus?.status === 'OPERATIONAL'
+                    ? 'Verified Operational'
+                    : tomtomStatus?.status === 'AUTH_FAILED'
+                    ? 'Unauthorized (HTTP 401)'
+                    : tomtomStatus?.status === 'NOT_CONFIGURED'
+                    ? 'Not Configured (Standby)'
+                    : tomtomStatus?.status || 'Standby'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-800/80">
+                <span className="text-slate-500 dark:text-slate-400">Traffic Products:</span>
+                <span className="font-mono text-slate-700 dark:text-slate-300">
+                  {tomtomStatus?.is_operational
+                    ? 'Traffic Flow v4 + Incident Details v5'
+                    : 'Awaiting verified key'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-800/80">
+                <span className="text-slate-500 dark:text-slate-400">API Key Mask:</span>
+                <span className="font-mono text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <Lock className="h-3 w-3 text-slate-400" />
+                  {tomtomStatus?.masked_key || 'not_configured'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-800/80">
+                <span className="text-slate-500 dark:text-slate-400">Basemap Fallback:</span>
+                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                  Esri / OpenStreetMap (100% Autonomous)
+                </span>
+              </div>
+
+              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed space-y-1">
+                <p className="font-semibold text-slate-800 dark:text-slate-200">TomTom Traffic Integration Guide:</p>
+                <p>1. Register a developer account at <a href="https://developer.tomtom.com" target="_blank" rel="noreferrer" className="text-sky-600 dark:text-sky-400 underline">developer.tomtom.com</a>.</p>
+                <p>2. Create an application with access to <strong>Traffic API</strong> (Traffic Flow & Incidents).</p>
+                <p>3. Set <code className="font-mono text-slate-700 dark:text-slate-300">TOMTOM_API_KEY</code> in <code className="font-mono">backend/.env</code> (kept private and git-ignored).</p>
+              </div>
+
+              {tomtomStatus?.error && (
+                <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed">
+                  <span className="font-semibold block mb-0.5">Notice:</span>
+                  {tomtomStatus.error}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => refreshTomTomStatus(true)}
+                disabled={isCheckingTomTom}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <RefreshCw className={`h-3 w-3 ${isCheckingTomTom ? 'animate-spin' : ''}`} />
+                <span>Re-probe TomTom Traffic</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsTomTomDiagOpen(false)}
+                className="rounded-lg bg-slate-900 dark:bg-slate-800 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 dark:hover:bg-slate-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

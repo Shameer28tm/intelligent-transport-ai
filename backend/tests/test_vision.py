@@ -165,3 +165,81 @@ def test_vision_analyze_frame_endpoint(client):
     assert res["source_video_name"] == "traffic_corridor_cam01.mp4"
     assert res["representative_frame_base64"] is not None
     assert "SELECTED FRAME INFERENCE" in res["provenance_notice"]
+
+
+def test_video_analysis_fails_gracefully_when_ffmpeg_missing(client, monkeypatch):
+    """P0.1: If FFmpeg is missing/blocked, return HTTP 503, never fabricate frames or save fake records."""
+    import subprocess
+
+    initial_history = client.get("/api/vision/history").json()
+    initial_count = len(initial_history)
+
+    sample_video_path = os.path.join("backend", "uploads", "sample_traffic_video.mp4")
+    if not os.path.exists(sample_video_path):
+        sample_video_path = os.path.join("uploads", "sample_traffic_video.mp4")
+
+    if not os.path.exists(sample_video_path):
+        return
+
+    with open(sample_video_path, "rb") as f:
+        video_bytes = f.read()
+
+    orig_run = subprocess.run
+
+    def mock_subprocess_run(cmd, *args, **kwargs):
+        if isinstance(cmd, (list, tuple)) and len(cmd) > 0 and cmd[0] == "ffmpeg":
+            raise FileNotFoundError("ffmpeg not found on PATH")
+        return orig_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", mock_subprocess_run)
+
+    files = {"file": ("ffmpeg_fail_test.mp4", video_bytes, "video/mp4")}
+    response = client.post("/api/vision/analyze-video?adapter=real&force_reanalyze=true", files=files)
+
+    # Must fail with 503 Service Unavailable, not 200 OK
+    assert response.status_code == 503
+    res_data = response.json()
+    detail = res_data.get("detail") or res_data.get("error") or ""
+    assert "ffmpeg" in detail.lower()
+
+    # History count must NOT increase (no misleading successful record persisted)
+    post_history = client.get("/api/vision/history").json()
+    assert len(post_history) == initial_count
+
+
+def test_video_analysis_fails_gracefully_when_ffprobe_missing(client, monkeypatch):
+    """P0.1: If ffprobe fails/missing, return HTTP 503, never fabricate 3.0s/1280x720."""
+    import subprocess
+
+    initial_history = client.get("/api/vision/history").json()
+    initial_count = len(initial_history)
+
+    sample_video_path = os.path.join("backend", "uploads", "sample_traffic_video.mp4")
+    if not os.path.exists(sample_video_path):
+        sample_video_path = os.path.join("uploads", "sample_traffic_video.mp4")
+
+    if not os.path.exists(sample_video_path):
+        return
+
+    with open(sample_video_path, "rb") as f:
+        video_bytes = f.read()
+
+    orig_run = subprocess.run
+
+    def mock_subprocess_run(cmd, *args, **kwargs):
+        if isinstance(cmd, (list, tuple)) and len(cmd) > 0 and cmd[0] == "ffprobe":
+            raise FileNotFoundError("ffprobe not found on PATH")
+        return orig_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", mock_subprocess_run)
+
+    files = {"file": ("ffprobe_fail_test.mp4", video_bytes, "video/mp4")}
+    response = client.post("/api/vision/analyze-video?adapter=real&force_reanalyze=true", files=files)
+
+    assert response.status_code == 503
+    res_data = response.json()
+    detail = res_data.get("detail") or res_data.get("error") or ""
+    assert "ffprobe" in detail.lower()
+
+    post_history = client.get("/api/vision/history").json()
+    assert len(post_history) == initial_count

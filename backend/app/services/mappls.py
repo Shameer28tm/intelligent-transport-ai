@@ -18,12 +18,10 @@ ROUTING_BASE_URL = "https://apis.mappls.com/advancedmaps/v1"
 
 def mask_secret(val: Optional[str]) -> str:
     """Mask secret for safe diagnostic logging without leaking keys."""
-    if not val:
+    if not val or not val.strip():
         return "not_configured"
-    val = val.strip()
-    if len(val) <= 8:
-        return "******"
-    return f"{val[:4]}...{val[-4:]}"
+    return "configured"
+
 
 
 class MapplsService:

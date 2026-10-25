@@ -197,6 +197,8 @@ export const api = {
       session_id?: string;
       cordon_y?: number;
       confidence_threshold?: number;
+      source_aspect_ratio?: number;
+      permitted_direction?: 'up' | 'down' | 'left' | 'right';
     }
   ): Promise<VisionAnalysisResult> {
     const formData = new FormData();
@@ -215,6 +217,12 @@ export const api = {
     }
     if (options?.session_id) {
       formData.append('session_id', options.session_id);
+    }
+    if (options?.source_aspect_ratio && Number.isFinite(options.source_aspect_ratio)) {
+      formData.append('source_aspect_ratio', options.source_aspect_ratio.toString());
+    }
+    if (options?.permitted_direction) {
+      formData.append('permitted_direction', options.permitted_direction);
     }
 
     const params = new URLSearchParams();
@@ -377,6 +385,128 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || err.error || 'Mappls routing request failed');
+    }
+    return res.json();
+  },
+
+  async getTomTomStatus(forceRefresh: boolean = false): Promise<import('../types').TomTomStatus> {
+    const res = await fetch(`${API_BASE}/tomtom/status${forceRefresh ? '?force_refresh=true' : ''}`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch TomTom status: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async getTomTomFlow(
+    lat: number,
+    lng: number,
+    zoom: number = 10,
+    unit: string = 'Kmh'
+  ): Promise<import('../types').TomTomFlowResponse> {
+    const params = new URLSearchParams({
+      lat: lat.toString(),
+      lng: lng.toString(),
+      zoom: zoom.toString(),
+      unit,
+    });
+    const res = await fetch(`${API_BASE}/tomtom/flow?${params.toString()}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || 'TomTom flow request failed');
+    }
+    return res.json();
+  },
+
+  async getTomTomIncidents(
+    bbox?: [number, number, number, number]
+  ): Promise<import('../types').TomTomIncidentsResponse> {
+    let url = `${API_BASE}/tomtom/incidents`;
+    if (bbox) {
+      const params = new URLSearchParams({
+        min_lon: bbox[0].toString(),
+        min_lat: bbox[1].toString(),
+        max_lon: bbox[2].toString(),
+        max_lat: bbox[3].toString(),
+      });
+      url += `?${params.toString()}`;
+    }
+    const res = await fetch(url);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || 'TomTom incidents request failed');
+    }
+    return res.json();
+  },
+
+  // ==========================================
+  // Tamil Nadu Road Safety
+  // ==========================================
+  async getSafetyContext(): Promise<import('../types').TnContext> {
+    const res = await fetch(`${API_BASE}/safety/context`);
+    if (!res.ok) throw new Error(`Safety context unavailable (HTTP ${res.status})`);
+    return res.json();
+  },
+
+  async getSafetySummary(): Promise<import('../types').SafetySummary> {
+    const res = await fetch(`${API_BASE}/safety/summary`);
+    if (!res.ok) throw new Error(`Safety summary unavailable (HTTP ${res.status})`);
+    return res.json();
+  },
+
+  async getSafetyHotspots(radiusM = 500, minIncidents = 2, days = 1095): Promise<import('../types').SafetyHotspotsResponse> {
+    const params = new URLSearchParams({ radius_m: String(radiusM), min_incidents: String(minIncidents), days: String(days) });
+    const res = await fetch(`${API_BASE}/safety/hotspots?${params.toString()}`);
+    if (!res.ok) throw new Error(`Hotspots unavailable (HTTP ${res.status})`);
+    return res.json();
+  },
+
+  async getNearestFacilities(lat: number, lng: number, limit = 5): Promise<import('../types').FacilitiesResponse> {
+    const params = new URLSearchParams({ lat: String(lat), lng: String(lng), limit: String(limit) });
+    const res = await fetch(`${API_BASE}/safety/facilities?${params.toString()}`);
+    if (!res.ok) throw new Error(`Facility lookup failed (HTTP ${res.status})`);
+    return res.json();
+  },
+
+  // ==========================================
+  // Multilingual Voice Assistant
+  // ==========================================
+  async getVoiceStatus(): Promise<import('../types').VoiceStatusResponse> {
+    const res = await fetch(`${API_BASE}/voice/status`);
+    if (!res.ok) throw new Error(`Voice status unavailable (HTTP ${res.status})`);
+    return res.json();
+  },
+
+  async processVoiceAssistant(options: {
+    audio?: Blob;
+    text?: string;
+    language?: string;
+  }): Promise<import('../types').VoiceAssistantResponse> {
+    const formData = new FormData();
+    if (options.audio) {
+      const blobType = (options.audio.type || '').toLowerCase();
+      let filename = 'microphone.webm';
+      if (blobType.includes('wav')) filename = 'microphone.wav';
+      else if (blobType.includes('ogg')) filename = 'microphone.ogg';
+      else if (blobType.includes('mp4')) filename = 'microphone.mp4';
+      else if (blobType.includes('mp3') || blobType.includes('mpeg')) filename = 'microphone.mp3';
+
+      formData.append('audio', options.audio, filename);
+    }
+    if (options.text) {
+      formData.append('text', options.text);
+    }
+    if (options.language) {
+      formData.append('language', options.language);
+    }
+
+    const res = await fetch(`${API_BASE}/voice/assistant`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || `Voice assistant request failed (${res.status})`);
     }
     return res.json();
   },

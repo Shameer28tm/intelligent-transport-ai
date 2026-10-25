@@ -19,28 +19,44 @@ export const SustainableMobilityPage: React.FC = () => {
             Electric vehicle infrastructure telemetry, micro-mobility trips, and greenhouse gas offset metrics
           </p>
         </div>
-        <span className="rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40 px-2.5 py-1 text-[11px] font-mono">
-          Municipal GHG Target: Net Zero 2040
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40 px-2.5 py-1 text-[11px] font-mono">
+            SYNTHETIC BENCHMARK ESTIMATES
+          </span>
+          <span className="rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-1 text-[11px] font-mono">
+            Target Baseline: Net Zero 2040
+          </span>
+        </div>
+      </div>
+
+      {/* Explicit Data Requirements Banner */}
+      <div className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50/70 dark:bg-amber-950/20 p-3.5 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
+        <span className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded bg-amber-200/80 dark:bg-amber-800/80 text-amber-950 dark:text-amber-100 shrink-0">
+          DATA REQUIREMENTS
         </span>
+        <p className="leading-relaxed text-[11px]">
+          Live EV charging telemetry requires <strong>OCPP 1.6 / 2.0.1</strong> protocol connectivity or commercial network APIs (e.g., ChargePoint, EVgo).
+          Micro-mobility trip analytics require regional <strong>GBFS (General Bikeshare Feed Specification)</strong> feeds.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] p-4 shadow-xs">
-          <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-mono">Emissions Averted</span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-mono">Averted Emissions (Estimated)</span>
           <p className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">1,840 tCO2e</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">This month via transit & electrification</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Model estimate via transit electrification</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] p-4 shadow-xs">
-          <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-mono">EV Charging Utilization</span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-mono">EV Fast-Charge Utilization</span>
           <p className="text-2xl font-bold font-mono text-sky-600 dark:text-sky-400 mt-1">86.4%</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Average fast-charge stall occupancy</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Sample hub occupancy benchmark</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] p-4 shadow-xs">
           <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-mono">Shared Micro-Mobility Trips</span>
           <p className="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1">32,840</p>
-          <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">+12% vs prior week</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Sample municipal operator estimate</p>
         </div>
       </div>
 

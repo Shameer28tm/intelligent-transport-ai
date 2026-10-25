@@ -35,8 +35,9 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
 }) => {
   const total = statistics?.total_incidents ?? incidents.length;
   const critical = statistics?.critical_incidents ?? incidents.filter((i) => i.severity === 'CRITICAL').length;
-  const avgCongestion = statistics?.average_congestion_pct ?? 54.2;
-  const monitoredCorridors = statistics?.monitored_corridors_count ?? 8;
+  // No invented fallbacks: show a dash until real statistics arrive
+  const avgCongestion = statistics?.average_congestion_pct;
+  const monitoredCorridors = statistics?.monitored_corridors_count;
 
   return (
     <div className="space-y-5">
@@ -44,16 +45,11 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] px-4 py-2.5 text-xs text-slate-700 dark:text-slate-300 shadow-xs transition-colors">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-sky-600 dark:text-sky-400 shrink-0" />
-          <span>
-            Operational Intelligence Platform: Verified telemetry synced from SQLite persistence.
-          </span>
+          <span>Operational summary from the incident database.</span>
         </div>
         <div className="flex items-center gap-2 text-[11px] font-mono">
           <span className="rounded bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40 px-2 py-0.5">
             Sample incidents: SIMULATED DEMO DATA
-          </span>
-          <span className="rounded bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/40 px-2 py-0.5">
-            Geospatial: MapLibre + Mappls Proxy
           </span>
         </div>
       </div>
@@ -63,8 +59,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
         <StatCard
           title="Active Road Incidents"
           value={total}
-          subtitle="Monitored in municipal grid"
-          change="+2 vs last hr"
+          subtitle="Currently recorded"
           isPositiveChange={false}
           variant={total > 10 ? 'warning' : 'default'}
           icon={<AlertTriangle className="h-5 w-5" />}
@@ -82,9 +77,8 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
 
         <StatCard
           title="Corridor Congestion"
-          value={`${avgCongestion}%`}
-          subtitle="Network-wide delay index"
-          change="-3.4% 24h trend"
+          value={avgCongestion !== undefined && avgCongestion !== null ? `${avgCongestion}%` : '—'}
+          subtitle="Average across recorded incidents"
           isPositiveChange={true}
           variant="accent"
           icon={<Gauge className="h-5 w-5" />}
@@ -92,9 +86,8 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
 
         <StatCard
           title="Monitored Corridors"
-          value={monitoredCorridors}
-          subtitle="Connected transit arterials"
-          change="100% telemetry online"
+          value={monitoredCorridors ?? '—'}
+          subtitle="Corridors with recorded incidents"
           isPositiveChange={true}
           variant="default"
           icon={<Layers className="h-5 w-5" />}
@@ -110,11 +103,11 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                 Geographic Traffic Operations Map
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Spatial telemetry • Mappls Geocoding & Routing • Fallback Basemap Architecture
+                Incident locations colour-coded by severity
               </p>
             </div>
             <span className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] px-2.5 py-1 text-[11px] font-mono text-slate-600 dark:text-slate-400 shadow-xs">
-              Grid: SF Metro / Dynamic Coordinates
+              Area: Tamil Nadu (simulated demo data)
             </span>
           </div>
 
@@ -173,7 +166,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                   className="group relative flex flex-col items-center justify-end h-full"
                 >
                   <div
-                    className="w-full rounded-t transition-all group-hover:brightness-110 cursor-pointer bg-gradient-to-t from-sky-200 to-sky-500 dark:from-sky-900/60 dark:to-sky-400/80"
+                    className="w-full rounded-t transition-all group-hover:brightness-110 cursor-pointer bg-sky-500 dark:bg-sky-400/80"
                     style={{ height: `${heightPct}%` }}
                   />
                   <span className="mt-1 text-[9px] text-slate-400 font-mono hidden md:block">

@@ -18,8 +18,8 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<IncidentCategory>('ACCIDENT');
   const [severity, setSeverity] = useState<IncidentSeverity>('HIGH');
-  const [latitude, setLatitude] = useState<string>('37.7845');
-  const [longitude, setLongitude] = useState<string>('-122.4072');
+  const [latitude, setLatitude] = useState<string>('13.0067');
+  const [longitude, setLongitude] = useState<string>('80.2045');
   const [locationName, setLocationName] = useState('');
   const [corridor, setCorridor] = useState('');
   const [currentSpeed, setCurrentSpeed] = useState<string>('15');
@@ -120,43 +120,43 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
               type="button"
               onClick={() =>
                 handleUsePreset(
-                  'Market St & 4th St',
-                  37.7858,
-                  -122.4065,
-                  'Market Street Arterial'
+                  'Kathipara junction, Guindy',
+                  13.0067,
+                  80.2045,
+                  'GST Road / Inner Ring Road'
                 )
               }
               className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-300 hover:text-white hover:border-sky-500 transition-colors"
             >
-              Market & 4th St
+              Kathipara, Chennai
             </button>
             <button
               type="button"
               onClick={() =>
                 handleUsePreset(
-                  'Bay Bridge Westbound Toll Plaza',
-                  37.8184,
-                  -122.3486,
-                  'I-80 Corridor'
+                  'NH-45 Vikravandi junction, Viluppuram',
+                  12.0379,
+                  79.5466,
+                  'NH-45 Chennai–Trichy'
                 )
               }
               className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-300 hover:text-white hover:border-sky-500 transition-colors"
             >
-              Bay Bridge Approach
+              NH-45 Vikravandi
             </button>
             <button
               type="button"
               onClick={() =>
                 handleUsePreset(
-                  'Van Ness Ave & Geary Blvd',
-                  37.7856,
-                  -122.4212,
-                  'Van Ness BRT Corridor'
+                  'NH-44 Krishnagiri bypass',
+                  12.5318,
+                  78.2270,
+                  'NH-44 Bengaluru–Krishnagiri'
                 )
               }
               className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-300 hover:text-white hover:border-sky-500 transition-colors"
             >
-              Van Ness BRT
+              NH-44 Krishnagiri
             </button>
           </div>
         </div>
@@ -215,7 +215,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
             <label className="text-xs font-medium text-slate-300">Transit Corridor Name</label>
             <input
               type="text"
-              placeholder="e.g. Market Street Corridor"
+              placeholder="e.g. NH-45 Chennai–Trichy"
               value={corridor}
               onChange={(e) => setCorridor(e.target.value)}
               className="w-full rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none"
@@ -232,7 +232,7 @@ export const IncidentFormModal: React.FC<IncidentFormModalProps> = ({
             <input
               type="text"
               required
-              placeholder="e.g. 5th St & Mission St"
+              placeholder="e.g. Kathipara junction, Guindy"
               value={locationName}
               onChange={(e) => setLocationName(e.target.value)}
               className="w-full rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none"
